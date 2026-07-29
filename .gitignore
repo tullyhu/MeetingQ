@@ -1,0 +1,6 @@
+.build/
+.build-workaround/
+dist/
+.DS_Store
+*.log
+.swiftpm/
