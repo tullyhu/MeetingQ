@@ -62,8 +62,8 @@ fi
 
 MM_DEV_KEYCHAIN="$HOME/Library/Keychains/mmdev.keychain-db"
 if [ -z "${CODESIGN_IDENTITY:-}" ] && [ -f "$MM_DEV_KEYCHAIN" ] \
-     && security find-certificate -c "MeetingMind Dev" "$MM_DEV_KEYCHAIN" >/dev/null 2>&1; then
-  CODESIGN_IDENTITY="MeetingMind Dev"
+     && security find-certificate -c "CalledMe Dev" "$MM_DEV_KEYCHAIN" >/dev/null 2>&1; then
+  CODESIGN_IDENTITY="CalledMe Dev"
   CODESIGN_KEYCHAIN="$MM_DEV_KEYCHAIN"
 fi
 
