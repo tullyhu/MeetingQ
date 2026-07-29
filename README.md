@@ -1,5 +1,7 @@
 # CalledMe
 
+**中文** | [English](README_EN.md)
+
 **会议中有人叫你，它比你先听到。** —— macOS 原生 AI 会议助手：本地实时转写 · 被叫秒级提醒 · 多模态深度理解 · 可完全离线运行
 
 <p>
@@ -149,7 +151,6 @@ VERSION=1.0.0 ./scripts/package-dmg.sh
 |------|------|
 | 数据库 / 截图 | `~/Library/Application Support/CalledMe/` |
 | API Key / 配置 | macOS 钥匙串（service: CalledMe） |
-| 日志 | `~/Library/Application Support/CalledMe/Logs/` |
 
 ## 技术栈
 
@@ -157,7 +158,7 @@ VERSION=1.0.0 ./scripts/package-dmg.sh
 |------|------|
 | UI | SwiftUI + AppKit（菜单栏 / 浮动窗 / 弹窗） |
 | 语音识别 | Speech framework（SpeechAnalyzer，设备端，随界面语言切换中英） |
-| 音频采集 | ScreenCaptureKit 系统音频 + AVAudioEngine 麦克风（可选混入） |
+| 音频采集 | ScreenCaptureKit 系统音频 + AVAudioEngine 麦克风（双轨独立转写） |
 | 截图 | ScreenCaptureKit，64×36 缩略图 MD5 去重 |
 | LLM | 任意 OpenAI 兼容 API（本地 oMLX / 云端均可） |
 | 视觉分析 | 多模态 LLM（OCR / 图表理解 / 发言人识别） |
@@ -221,17 +222,3 @@ Issue 和 PR 欢迎。提交前请运行 `./scripts/bundle.sh` 确认编译通�
 
 [GPLv3](LICENSE) — 你可以自由使用、修改和分发本软件，但衍生作品必须以相同协议开源。
 
----
-
-## English Summary
-
-**CalledMe** is a native macOS AI meeting assistant that **alerts you the moment someone says your name** — with an instant screenshot, the original sentence, surrounding context, and AI-extracted questions you need to answer.
-
-- 🎙️ **100% on-device** live transcription (Apple SpeechAnalyzer, macOS 26+)
-- 🔔 Three-layer name-detection pipeline (regex + pinyin fuzzy match → question patterns → LLM semantics)
-- 🧠 Deeper meeting minutes via **multimodal LLMs** (Qwen3.6 series recommended): understands transcripts *and* screenshots — slides, charts, even who's speaking
-- 📸 Periodic screenshots with dedup + multimodal vision analysis (even detects who's speaking)
-- 🔒 Privacy-first: **never records meeting audio/video** (audio processed in memory only), sandboxed, Keychain-stored keys, no telemetry, no accounts
-- 🌐 Bilingual UI (中文 / English), 4-step onboarding, one-click self-diagnostics
-
-Requirements: macOS 26+, Apple Silicon. Build: `./scripts/bundle.sh` (pure swiftc, zero dependencies). GPLv3 License.
