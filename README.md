@@ -97,7 +97,7 @@ CalledMe 就是为这一刻而生的：
 ### 方式二：源码构建
 
 ```bash
-git clone https://github.com/<your-name>/CalledMe.git
+git clone https://github.com/tullyhu/CalledMe.git
 cd CalledMe
 
 # 编译并打包 .app（输出 dist/CalledMe.app）
