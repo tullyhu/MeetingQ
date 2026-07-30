@@ -12,7 +12,7 @@
   <img alt="License" src="https://img.shields.io/badge/license-GPLv3-blue">
 </p>
 
-![CalledMe 被叫提醒演示](docs/screenshots/demo-name-alert.gif)
+![CalledMe 被叫提醒演示](docs/screenshots/02-name-alert.png)
 
 ---
 
