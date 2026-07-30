@@ -2,7 +2,7 @@
 
 [中文](README.md) | **English**
 
-**When someone calls your name in a meeting, CalledMe hears it before you do.** — A native macOS AI meeting assistant: on-device live transcription · instant name call-out alerts · multimodal deep understanding · runs fully offline
+**When someone calls your name in a meeting, CalledMe alerts you right away.** — A native macOS AI meeting assistant: on-device live transcription · instant name call-out alerts · meeting minutes with screenshots · runs fully offline
 
 <p>
   <img alt="macOS" src="https://img.shields.io/badge/macOS-15%2B-black">

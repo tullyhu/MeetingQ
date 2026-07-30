@@ -2,7 +2,7 @@
 
 **中文** | [English](README_EN.md)
 
-**会议中有人叫你，它比你先听到。** —— macOS 原生 AI 会议助手：本地实时转写 · 被叫秒级提醒 · 多模态深度理解 · 可完全离线运行
+**开会时被叫到名字，它第一时间提醒你。** —— macOS 原生 AI 会议助手：本地实时转写 · 被叫即时提醒 · 图文会议记录 · 可完全离线运行
 
 <p>
   <img alt="macOS" src="https://img.shields.io/badge/macOS-15%2B-black">
