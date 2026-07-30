@@ -31,8 +31,6 @@ public struct QuickSummaryView: View {
 
     @State private var pulse = false
 
-    private static let accent = Color(red: 0.145, green: 0.388, blue: 0.922)
-
     public init(state: QuickSummaryState, onRefresh: @escaping () -> Void, onClose: @escaping () -> Void) {
         self.state = state
         self.onRefresh = onRefresh
@@ -42,6 +40,7 @@ public struct QuickSummaryView: View {
     public var body: some View {
         VStack(spacing: 0) {
             titleBar
+            Divider()
             ScrollView {
                 if state.data.isLoading {
                     skeleton
@@ -49,39 +48,38 @@ public struct QuickSummaryView: View {
                     content
                 }
             }
+            Divider()
             bottomBar
         }
         .frame(width: 480, height: 560)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(white: 0.87), lineWidth: 1))
-        .shadow(color: .black.opacity(0.15), radius: 24, y: 6)
+        .background(Color(nsColor: .windowBackgroundColor))
         .onExitCommand { onClose() }
     }
 
     private var titleBar: some View {
         HStack(spacing: 8) {
-            Text("⚡").font(.system(size: 16))
-            Text(tr("快速摘要", "Quick Summary"))
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color(white: 0.07))
+            Label(tr("快速摘要", "Quick Summary"), systemImage: "doc.text.magnifyingglass")
+                .font(.headline)
             Spacer()
             Text(tr("ESC 关闭", "ESC to Close"))
-                .font(.system(size: 11))
-                .foregroundStyle(Color(white: 0.67))
+                .font(.caption)
+                .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 16)
-        .frame(height: 44)
-        .background(Color(white: 0.96))
+        .padding(.vertical, 10)
     }
 
     private var skeleton: some View {
         VStack(spacing: 0) {
-            Text(tr("加载中...", "Loading..."))
-                .font(.system(size: 13))
-                .foregroundStyle(Color(white: 0.67))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(tr("加载中…", "Loading…"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
             skeletonLine(width: nil)
             skeletonLine(width: 340)
             skeletonLine(width: 280)
@@ -93,7 +91,7 @@ public struct QuickSummaryView: View {
 
     private func skeletonLine(width: CGFloat?) -> some View {
         RoundedRectangle(cornerRadius: 6)
-            .fill(Color(white: 0.93))
+            .fill(Color(nsColor: .separatorColor))
             .frame(width: width, height: 12)
             .frame(maxWidth: .infinity, alignment: width == nil ? .center : .leading)
             .opacity(pulse ? 0.35 : 1.0)
@@ -105,39 +103,43 @@ public struct QuickSummaryView: View {
         VStack(alignment: .leading, spacing: 0) {
             sectionHeader(tr("当前议题", "Current Topic"))
             Text(state.data.topic)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color(white: 0.07))
+                .font(.callout.weight(.medium))
                 .padding(.bottom, 16)
 
             sectionHeader(tr("要点摘要", "Key Points"))
             Text(state.data.summary)
-                .font(.system(size: 12))
-                .foregroundStyle(Color(white: 0.13))
+                .font(.callout)
                 .lineSpacing(8)
                 .padding(.bottom, 16)
 
             if !state.data.decisions.isEmpty {
                 sectionHeader(tr("决策", "Decisions"))
-                ForEach(Array(state.data.decisions.enumerated()), id: \.offset) { _, d in
-                    HStack(alignment: .top, spacing: 4) {
-                        Text("•").foregroundStyle(Color(red: 0.086, green: 0.639, blue: 0.29))
-                        Text(d).foregroundStyle(Color(white: 0.13))
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(state.data.decisions.enumerated()), id: \.offset) { _, d in
+                        Label {
+                            Text(d)
+                        } icon: {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+                        .font(.callout)
                     }
-                    .font(.system(size: 12))
-                    .padding(.vertical, 3)
                 }
             }
 
             if !state.data.actionItems.isEmpty {
                 sectionHeader(tr("行动项", "Action Items"))
                     .padding(.top, 16)
-                ForEach(Array(state.data.actionItems.enumerated()), id: \.offset) { _, a in
-                    HStack(alignment: .top, spacing: 4) {
-                        Text("→").foregroundStyle(Color(red: 0.851, green: 0.467, blue: 0.024))
-                        Text(a).foregroundStyle(Color(white: 0.13))
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(state.data.actionItems.enumerated()), id: \.offset) { _, a in
+                        Label {
+                            Text(a)
+                        } icon: {
+                            Image(systemName: "arrow.right.circle.fill")
+                                .foregroundStyle(.orange)
+                        }
+                        .font(.callout)
                     }
-                    .font(.system(size: 12))
-                    .padding(.vertical, 3)
                 }
             }
         }
@@ -148,50 +150,26 @@ public struct QuickSummaryView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(Self.accent)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
             .padding(.bottom, 6)
     }
 
     private var bottomBar: some View {
         HStack(spacing: 8) {
             Button(action: onRefresh) {
-                Text(tr("🔄 刷新", "🔄 Refresh"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(red: 0.388, green: 0.4, blue: 0.945))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color(red: 0.933, green: 0.949, blue: 1))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.78, green: 0.824, blue: 1), lineWidth: 1))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                Label(tr("刷新", "Refresh"), systemImage: "arrow.clockwise")
             }
-            .buttonStyle(.plain)
             Button(action: copySummary) {
-                Text(tr("📋 复制摘要", "📋 Copy Summary"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(white: 0.33))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color(white: 0.96))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(white: 0.87), lineWidth: 1))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                Label(tr("复制摘要", "Copy"), systemImage: "doc.on.doc")
             }
-            .buttonStyle(.plain)
             Spacer()
-            Button(action: onClose) {
-                Text(tr("关闭", "Close"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(white: 0.2))
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 6)
-                    .background(Color(white: 0.87))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-            .buttonStyle(.plain)
+            Button(tr("关闭", "Close"), action: onClose)
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(Color(white: 0.94))
     }
 
     private func copySummary() {

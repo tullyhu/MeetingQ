@@ -19,6 +19,7 @@ import SwiftUI
 public struct FloatingWindowView: View {
     @State private var vm: FloatingWindowViewModel
     @State private var topicFlash: Double = 0
+    @State private var showTranscriptResetConfirm = false
 
     @MainActor public init(vm: FloatingWindowViewModel? = nil) {
         _vm = State(initialValue: vm ?? FloatingWindowViewModel())
@@ -27,20 +28,19 @@ public struct FloatingWindowView: View {
     public var body: some View {
         VStack(spacing: 0) {
             titleBar
+            Divider()
             statusStrip
             if !vm.isMonitoring { windowPicker }
             if vm.isDiagnosticVisible { diagnosticPanel }
             topicRow
             transcriptArea
             if vm.hasInlineSummary || vm.isInlineSummaryLoading { inlineSummary }
+            Divider()
             bottomBar
         }
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(mmHex: "E0E0E0"), lineWidth: 1))
-        .shadow(color: .black.opacity(0.15), radius: 14, x: 0, y: 6)
-        .frame(minWidth: 260, idealWidth: 320, maxWidth: 400,
-               minHeight: 340, idealHeight: 440, maxHeight: 900)
+        .background(.regularMaterial)
+        .frame(minWidth: 300, idealWidth: 340, maxWidth: 440,
+               minHeight: 380, idealHeight: 480, maxHeight: 900)
         .onAppear { vm.refreshWindows() }
         .onReceive(NotificationCenter.default.publisher(for: .mmRunSelfTest)) { _ in
             Task { await vm.runSelfTest() }
@@ -50,169 +50,150 @@ public struct FloatingWindowView: View {
     private var titleBar: some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(vm.isSelfTestRunning ? Color(mmHex: "818CF8")
-                      : vm.isMonitoring ? Color(mmHex: "22C55E") : Color(mmHex: "CCCCCC"))
-                .frame(width: 7, height: 7)
+                .fill(vm.isSelfTestRunning ? Color.accentColor
+                      : vm.isMonitoring ? Color.green : Color(nsColor: .tertiaryLabelColor))
+                .frame(width: 8, height: 8)
             Text("CalledMe")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color(mmHex: "111111"))
+                .font(.headline)
             Spacer()
             if vm.isMonitoring {
-                iconButton("◉", tooltip: tr("自检状态", "Self Test Status")) { vm.toggleDiagnostics() }
+                headerButton("checklist", tooltip: tr("自检状态", "Self Test Status")) { vm.toggleDiagnostics() }
             }
-            iconButton("📋", tooltip: tr("历史会议", "Meeting History")) { WindowRouter.openHistory() }
-            iconButton("⚙", tooltip: tr("设置", "Settings")) { WindowRouter.openSettings() }
-            iconButton("▾", tooltip: tr("隐藏到托盘", "Hide to Menu Bar")) { WindowRouter.hideMainWindow() }
+            headerButton("clock.arrow.circlepath", tooltip: tr("历史会议", "Meeting History")) { WindowRouter.openHistory() }
+            headerButton("gearshape", tooltip: tr("设置", "Settings")) { WindowRouter.openSettings() }
+            headerButton("menubar.arrow.down.rectangle", tooltip: tr("隐藏到菜单栏", "Hide to Menu Bar")) { WindowRouter.hideMainWindow() }
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 8)
-        .frame(height: 44)
-        .overlay(alignment: .bottom) { separator }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
     private var statusStrip: some View {
         HStack(spacing: 6) {
-            Circle()
-                .fill(vm.isMonitoring ? Color(mmHex: "22C55E") : Color(mmHex: "CCCCCC"))
-                .frame(width: 6, height: 6)
-            Text(vm.statusText)
-                .font(.system(size: 11))
-                .foregroundStyle(Color(mmHex: "555555"))
-            Text("  ·  ")
-                .font(.system(size: 11))
-                .foregroundStyle(Color(mmHex: "DDDDDD"))
+            Label {
+                Text(vm.statusText)
+            } icon: {
+                Image(systemName: vm.isMonitoring ? "waveform" : "waveform.slash")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            Text("·")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
             Text(vm.elapsedTime)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(Color(mmHex: "888888"))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
             Spacer()
         }
         .padding(.horizontal, 14)
-        .frame(height: 26)
+        .padding(.vertical, 6)
     }
 
     private var windowPicker: some View {
         HStack(spacing: 8) {
             Text(tr("截图窗口", "Capture Window"))
-                .font(.system(size: 11))
-                .foregroundStyle(Color(mmHex: "777777"))
-            TextField(tr("选择会议窗口", "Select Meeting Window"), text: $vm.captureWindowTitle)
-                .textFieldStyle(.plain)
-                .font(.system(size: 11))
-                .foregroundStyle(Color(mmHex: "111111"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Menu {
                 ForEach(vm.availableWindows, id: \.self) { title in
                     Button(title) { vm.captureWindowTitle = title }
                 }
             } label: {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9))
-                    .foregroundStyle(Color(mmHex: "555555"))
+                HStack(spacing: 4) {
+                    Text(vm.captureWindowTitle.isEmpty
+                         ? tr("选择会议窗口", "Select Meeting Window")
+                         : vm.captureWindowTitle)
+                        .font(.callout)
+                        .foregroundStyle(vm.captureWindowTitle.isEmpty ? Color.secondary : Color.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity)
+                .background(Color(nsColor: .textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
             }
             .menuStyle(.borderlessButton)
-            .fixedSize()
-            iconButton("↺", tooltip: tr("刷新窗口列表", "Refresh Window List"), size: 26, fontSize: 14) { vm.refreshWindows() }
+            .menuIndicator(.hidden)
+            headerButton("arrow.clockwise", tooltip: tr("刷新窗口列表", "Refresh Window List")) { vm.refreshWindows() }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(Color(mmHex: "F5F5F5"))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(mmHex: "DDDDDD"), lineWidth: 1))
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 12)
         .padding(.vertical, 4)
     }
 
     private var diagnosticPanel: some View {
-        HStack(spacing: 0) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(LinearGradient(colors: [Color(mmHex: "6366F1"), Color(mmHex: "818CF8")],
-                                     startPoint: .top, endPoint: .bottom))
-                .frame(width: 3)
-                .padding(.vertical, 2)
-            VStack(alignment: .leading, spacing: 0) {
-                ScrollView {
-                    VStack(spacing: 6) {
-                        ForEach(vm.diagnosticSteps) { step in
-                            HStack(spacing: 0) {
-                                Text(step.icon)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(step.iconColor)
-                                    .frame(width: 18, alignment: .leading)
-                                Text(step.name)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(Color(mmHex: "666666"))
-                                    .frame(width: 68, alignment: .leading)
-                                Text(step.detail)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(step.detailColor)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                Spacer(minLength: 0)
-                            }
+        VStack(alignment: .leading, spacing: 8) {
+            ScrollView {
+                VStack(spacing: 6) {
+                    ForEach(vm.diagnosticSteps) { step in
+                        HStack(spacing: 8) {
+                            Image(systemName: step.icon)
+                                .font(.caption)
+                                .foregroundStyle(step.iconColor)
+                                .frame(width: 16, alignment: .leading)
+                            Text(step.name)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 72, alignment: .leading)
+                            Text(step.detail)
+                                .font(.caption)
+                                .foregroundStyle(step.detailColor)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                            Spacer(minLength: 0)
                         }
                     }
                 }
-                .frame(maxHeight: 160)
-
-                if vm.hasSelfTestResult {
-                    Text(vm.selfTestResult)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(vm.selfTestPassed ? Color(mmHex: "228B22") : Color(mmHex: "CC3333"))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(vm.selfTestPassed ? Color(mmHex: "EEFFEE") : Color(mmHex: "FFEEEE"))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6)
-                            .stroke(vm.selfTestPassed ? Color(mmHex: "CCFFCC") : Color(mmHex: "FFCCCC"), lineWidth: 1))
-                        .padding(.top, 6)
-                }
-
-                if vm.hasDiagnosticHint {
-                    Text(vm.diagnosticHint)
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color(mmHex: "997700"))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(Color(mmHex: "FFFBEE"))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(mmHex: "FFE580"), lineWidth: 1))
-                        .padding(.top, 4)
-                }
             }
-            .padding(.leading, 10)
+            .frame(maxHeight: 160)
+
+            if vm.hasSelfTestResult {
+                Label(vm.selfTestResult, systemImage: vm.selfTestPassed ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(vm.selfTestPassed ? Color.green : Color.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if vm.hasDiagnosticHint {
+                Label(vm.diagnosticHint, systemImage: "lightbulb")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
-        .padding(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
-        .background(Color(mmHex: "F5F5F5"))
+        .padding(10)
+        .background(Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(mmHex: "DDDDDD"), lineWidth: 1))
-        .padding(.horizontal, 10)
-        .padding(.bottom, 6)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
     private var topicRow: some View {
-        HStack(spacing: 0) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color(mmHex: "6366F1"))
-                .frame(width: 3)
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 8) {
+            Image(systemName: "text.quote")
+                .font(.caption)
+                .foregroundStyle(Color.accentColor)
+            VStack(alignment: .leading, spacing: 1) {
                 Text(tr("当前议题", "Current Topic"))
-                    .font(.system(size: 10))
-                    .foregroundStyle(Color(mmHex: "777777"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
                 Text(vm.currentTopic)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color(mmHex: "111111"))
+                    .font(.callout.weight(.medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
-            .padding(.leading, 8)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 3)
-        .background(Color(mmHex: "E0E7FF").opacity(topicFlash))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
         .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.accentColor.opacity(topicFlash * 0.15))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 12)
         .padding(.bottom, 8)
         .onChange(of: vm.topicFlashId) { _, _ in
             topicFlash = 1
@@ -224,9 +205,9 @@ public struct FloatingWindowView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 Text(vm.latestTranscript)
-                    .font(.system(size: 12))
-                    .lineSpacing(10)
-                    .foregroundStyle(Color(mmHex: "222222"))
+                    .font(.callout)
+                    .lineSpacing(8)
+                    .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -237,116 +218,137 @@ public struct FloatingWindowView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(mmHex: "F8F8F8"))
+        .background(Color(nsColor: .textBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(mmHex: "DDDDDD"), lineWidth: 1))
-        .padding(.horizontal, 10)
-        .padding(.bottom, 6)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
+        .overlay(alignment: .topTrailing) {
+            if !vm.latestTranscript.isEmpty {
+                Button { showTranscriptResetConfirm = true } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .help(tr("清空转写显示（不影响已保存的记录）", "Clear transcript display (saved records are not affected)"))
+                .padding(4)
+            }
+        }
+        .confirmationDialog(tr("确定清空当前转写显示？已保存的会议记录不受影响。",
+                               "Clear the current transcript display? Saved meeting records are not affected."),
+                            isPresented: $showTranscriptResetConfirm, titleVisibility: .visible) {
+            Button(tr("清空", "Clear"), role: .destructive) { vm.resetTranscriptDisplay() }
+            Button(tr("取消", "Cancel"), role: .cancel) {}
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
     private var inlineSummary: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(tr("AI 摘要", "AI Summary"))
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(Color(mmHex: "777777"))
+                Label(tr("AI 摘要", "AI Summary"), systemImage: "sparkles")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
                 Spacer()
                 if vm.isInlineSummaryLoading {
-                    Text(tr("生成中…", "Generating…"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(mmHex: "AAAAAA"))
+                    ProgressView()
+                        .controlSize(.small)
                 }
             }
             ScrollView {
                 Text(vm.inlineSummaryText)
-                    .font(.system(size: 11))
-                    .lineSpacing(7)
-                    .foregroundStyle(Color(mmHex: "444444"))
+                    .font(.caption)
+                    .lineSpacing(6)
+                    .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.vertical, 8)
         .frame(maxHeight: 110)
-        .background(Color(mmHex: "F0F0F0"))
+        .background(Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(mmHex: "DDDDDD"), lineWidth: 1))
-        .padding(.horizontal, 10)
-        .padding(.bottom, 6)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 
     private var bottomBar: some View {
-        HStack(spacing: 4) {
-            Spacer(minLength: 0)
+        HStack(spacing: 6) {
             if vm.hasSessionData {
-                ghostButton(tr("📷 截图", "📷 Screenshots"), color: Color(mmHex: "16A34A")) { vm.openScreenshotAlbum() }
+                Button { vm.openScreenshotAlbum() } label: {
+                    Label(tr("截图", "Shots"), systemImage: "photo.on.rectangle")
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
-            ghostButton(vm.multimodalButtonText, color: Color(mmHex: "7C3AED")) { vm.toggleMultimodalMode() }
+            Button { vm.toggleMultimodalMode() } label: {
+                Label(vm.multimodalButtonText, systemImage: "eye")
+            }
+            .buttonStyle(.borderless)
+            .font(.caption)
+            .foregroundStyle(.secondary)
             if vm.hasSessionData {
-                ghostButton(tr("⚡ 摘要", "⚡ Summary"), color: Color(mmHex: "2563EB")) { Task { await vm.showQuickSummary() } }
+                Button { Task { await vm.showQuickSummary() } } label: {
+                    Label(tr("摘要", "Summary"), systemImage: "doc.text")
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             if vm.isMonitoring {
-                ghostButton(vm.isManualAlertRunning ? tr("收集中…", "Collecting…") : tr("🔔 被叫到", "🔔 Name Called"),
-                            color: vm.isManualAlertRunning ? Color(mmHex: "818CF8") : Color(mmHex: "D97706")) {
+                Button {
                     Task { await vm.manualTriggerAlert() }
+                } label: {
+                    Label(vm.isManualAlertRunning ? tr("收集中…", "Collecting…") : tr("被叫到", "Name Called"),
+                          systemImage: "bell.badge")
                 }
+                .buttonStyle(.borderless)
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 .disabled(vm.isManualAlertRunning)
             } else {
-                ghostButton(vm.isSelfTestRunning ? tr("自检中…", "Testing…") : tr("功能自检", "Self Test"),
-                            color: vm.isSelfTestRunning ? Color(mmHex: "818CF8") : Color(mmHex: "555555")) {
+                Button {
                     Task { await vm.runSelfTest() }
+                } label: {
+                    Label(vm.isSelfTestRunning ? tr("自检中…", "Testing…") : tr("自检", "Self Test"),
+                          systemImage: "checklist")
                 }
+                .buttonStyle(.borderless)
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 .disabled(vm.isSelfTestRunning)
             }
+            Spacer(minLength: 0)
             Button {
                 Task {
                     if vm.isMonitoring { await vm.stopListening() } else { await vm.startListening() }
                 }
             } label: {
-                Text(vm.isMonitoring ? tr("停止监听", "Stop Listening") : tr("开始监听", "Start Listening"))
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(vm.isMonitoring ? Color(mmHex: "EF4444") : Color(mmHex: "6366F1"))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                Label(vm.isMonitoring ? tr("停止", "Stop") : tr("开始监听", "Start"),
+                      systemImage: vm.isMonitoring ? "stop.circle.fill" : "record.circle")
+                    .font(.callout.weight(.semibold))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderedProminent)
+            .tint(vm.isMonitoring ? .red : .accentColor)
+            .controlSize(.regular)
+            .keyboardShortcut(.defaultAction)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .overlay(alignment: .top) { separator }
     }
 
-    private var separator: some View {
-        LinearGradient(colors: [Color(mmHex: "E0E0E0").opacity(0), Color(mmHex: "E0E0E0"),
-                                Color(mmHex: "E0E0E0"), Color(mmHex: "E0E0E0").opacity(0)],
-                       startPoint: .leading, endPoint: .trailing)
-            .frame(height: 1)
-    }
-
-    private func iconButton(_ symbol: String, tooltip: String, size: CGFloat = 28, fontSize: CGFloat = 13,
-                            action: @escaping () -> Void) -> some View {
+    private func headerButton(_ symbol: String, tooltip: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(symbol)
-                .font(.system(size: fontSize))
-                .foregroundStyle(Color(mmHex: "555555"))
-                .frame(width: size, height: size)
+            Image(systemName: symbol)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.borderless)
         .help(tooltip)
-    }
-
-    private func ghostButton(_ title: String, color: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 11))
-                .foregroundStyle(color)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(mmHex: "CCCCCC"), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
     }
 }

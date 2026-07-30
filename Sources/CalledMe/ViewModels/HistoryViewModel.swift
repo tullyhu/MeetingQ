@@ -49,6 +49,7 @@ public final class ScreenshotItem: Identifiable {
     public var analysisStatus: String?
     public var activeSpeakerName: String?
     public var thumbnail: NSImage?
+    public private(set) var loadFailed = false
 
     public var id: String { filePath }
 
@@ -66,7 +67,7 @@ public final class ScreenshotItem: Identifiable {
     }
 
     public func loadThumbnail() async {
-        guard thumbnail == nil else { return }
+        guard thumbnail == nil, !loadFailed else { return }
         let path = filePath
         let image = await Task.detached(priority: .utility) { () -> NSImage? in
             guard let src = NSImage(contentsOfFile: path) else { return nil }
@@ -81,7 +82,13 @@ public final class ScreenshotItem: Identifiable {
             img.unlockFocus()
             return img
         }.value
-        if thumbnail == nil { thumbnail = image }
+        if thumbnail == nil {
+            if let image {
+                thumbnail = image
+            } else {
+                loadFailed = true
+            }
+        }
     }
 }
 
@@ -301,10 +308,18 @@ public final class HistoryViewModel {
         target.decisions = snap.decisions
         target.actionItems = snap.actionItems
         target.transcriptCount = snap.transcripts.count
-        target.screenshotPaths = snap.screenshots.map {
-            ScreenshotItem(filePath: $0.filePath, timestamp: $0.timestamp,
-                           aiSummary: $0.aiSummary, analysisStatus: $0.analysisStatus,
-                           activeSpeakerName: $0.activeSpeakerName)
+        let existing = Dictionary(target.screenshotPaths.map { ($0.filePath, $0) },
+                                  uniquingKeysWith: { first, _ in first })
+        target.screenshotPaths = snap.screenshots.map { s in
+            if let item = existing[s.filePath] {
+                item.aiSummary = s.aiSummary
+                item.analysisStatus = s.analysisStatus
+                item.activeSpeakerName = s.activeSpeakerName
+                return item
+            }
+            return ScreenshotItem(filePath: s.filePath, timestamp: s.timestamp,
+                                  aiSummary: s.aiSummary, analysisStatus: s.analysisStatus,
+                                  activeSpeakerName: s.activeSpeakerName)
         }
         target.overallSummary = snap.summary
         loadedIds.insert(sessionId)

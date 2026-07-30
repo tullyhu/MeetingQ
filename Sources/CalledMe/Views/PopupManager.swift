@@ -120,12 +120,13 @@ public final class PopupManager: PopupManaging {
             onTogglePin: { [weak self] in self?.toggleNameAlertPin(id: data.id) }
         ))
         let hosting = NSHostingView(rootView: view)
-        hosting.frame = NSRect(origin: .zero, size: NSSize(width: 420, height: 10))
+        hosting.frame = NSRect(origin: .zero, size: NSSize(width: 520, height: 4000))
         hosting.layoutSubtreeIfNeeded()
         var size = hosting.fittingSize
-        size.width = 420
-        size.height = min(max(size.height, 120), 540)
-        let panel = makePanel(contentSize: size)
+        size.width = 520
+        let maxHeight = max((NSScreen.main?.visibleFrame.height ?? 800) - 40, 300)
+        size.height = min(max(size.height, 120), maxHeight)
+        let panel = makePanel(contentSize: size, transparentBackground: true)
         hosting.frame = NSRect(origin: .zero, size: size)
         panel.contentView = hosting
         stackBottomRight(panel, excluding: data.id)
@@ -133,7 +134,7 @@ public final class PopupManager: PopupManaging {
         alerts[data.id] = panel
     }
 
-    private func makePanel(contentSize: NSSize) -> NSPanel {
+    private func makePanel(contentSize: NSSize, transparentBackground: Bool = false) -> NSPanel {
         let panel = NSPanel(contentRect: NSRect(origin: .zero, size: contentSize),
                             styleMask: [.titled, .closable, .nonactivatingPanel, .fullSizeContentView],
                             backing: .buffered, defer: false)
@@ -146,7 +147,10 @@ public final class PopupManager: PopupManaging {
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.backgroundColor = .clear
+        if transparentBackground {
+            panel.backgroundColor = .clear
+            panel.isOpaque = false
+        }
         panel.hasShadow = true
         panel.isReleasedWhenClosed = false
         return panel

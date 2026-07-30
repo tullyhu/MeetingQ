@@ -31,10 +31,10 @@ public struct LanguagePickerView: View {
                 .frame(width: 72, height: 72)
                 .padding(.bottom, 16)
             Text("CalledMe")
-                .font(.system(size: 22, weight: .bold))
+                .font(.title.weight(.bold))
                 .padding(.bottom, 6)
             Text("选择语言 / Choose your language")
-                .font(.system(size: 13))
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 28)
 
@@ -55,15 +55,15 @@ public struct LanguagePickerView: View {
         } label: {
             VStack(spacing: 4) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.callout.weight(.semibold))
                 Text(subtitle)
-                    .font(.system(size: 11))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .frame(width: 140, height: 64)
             .background(Color(nsColor: .controlBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.accentColor.opacity(0.4), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }

@@ -35,10 +35,6 @@ public struct NameAlertView: View {
 
     @State private var screenshot: NSImage?
 
-    private static let headerBg = Color(red: 1, green: 0.953, blue: 0.804)
-    private static let accent = Color(red: 0.706, green: 0.325, blue: 0.035)
-    private static let buttonBg = Color(red: 1, green: 0.702, blue: 0.278)
-
     public init(data: NameAlertData, callbacks: NameAlertCallbacks) {
         self.data = data
         self.callbacks = callbacks
@@ -47,82 +43,79 @@ public struct NameAlertView: View {
     public var body: some View {
         VStack(spacing: 0) {
             header
+            Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     screenshotSection
                     quoteSection
                     questionsSection
                     contextSection
-                    HStack {
-                        Spacer()
-                        Button(action: callbacks.onAcknowledge) {
-                            Text(tr("✅ 我知道了", "✅ Got It"))
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(Color(white: 0.07))
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 7)
-                                .background(Self.buttonBg)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.top, 12)
                 }
                 .padding(EdgeInsets(top: 10, leading: 14, bottom: 14, trailing: 14))
             }
-            .frame(maxHeight: 480)
+            Divider()
+            HStack {
+                Spacer()
+                Button(tr("我知道了", "Got It"), action: callbacks.onAcknowledge)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
         }
-        .frame(width: 420)
-        .background(Color(red: 0.973, green: 0.973, blue: 0.973))
+        .frame(width: 520)
+        .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(red: 1, green: 0.702, blue: 0.278).opacity(0.38), lineWidth: 1.5))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.5), lineWidth: 1.5))
         .shadow(color: .black.opacity(0.18), radius: 22, y: 5)
         .onAppear { loadScreenshot() }
     }
 
     private var header: some View {
-        HStack(spacing: 7) {
-            Text("⚠️").font(.system(size: 14))
+        HStack(spacing: 8) {
+            Image(systemName: "bell.badge.fill")
+                .font(.callout)
+                .foregroundStyle(.orange)
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 Text(elapsedText(at: context.date))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Self.accent)
+                    .font(.callout.weight(.semibold))
             }
             Spacer()
             Button(action: callbacks.onTogglePin) {
-                Text("📌")
-                    .font(.system(size: 13))
-                    .opacity(data.isPinned ? 1.0 : 0.4)
+                Image(systemName: data.isPinned ? "pin.fill" : "pin")
+                    .font(.callout)
+                    .foregroundStyle(data.isPinned ? Color.accentColor : Color.secondary)
                     .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
             .help(data.isPinned ? tr("已固定 — 点击取消固定", "Pinned — click to unpin") : tr("固定此提示（防止被新提醒覆盖）", "Pin this alert (prevents it from being replaced by new alerts)"))
             Button(action: callbacks.onClose) {
-                Text("✕")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(white: 0.47))
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.tertiary)
                     .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
+            .help(tr("关闭", "Close"))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Self.headerBg)
     }
 
     @ViewBuilder
     private var screenshotSection: some View {
         if let screenshot {
-            Text(tr("📸  被叫时截图", "📸  Screenshot When Called"))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(Self.accent)
-                .padding(.bottom, 5)
+            sectionHeader(tr("被叫时截图", "Screenshot When Called"))
             Image(nsImage: screenshot)
                 .resizable()
                 .scaledToFill()
                 .frame(maxWidth: .infinity, maxHeight: 160)
                 .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
                 .onTapGesture { Lightbox.show(image: screenshot) }
                 .help(tr("点击放大查看", "Click to enlarge"))
                 .padding(.bottom, 12)
@@ -131,33 +124,32 @@ public struct NameAlertView: View {
 
     private var quoteSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(tr("原话", "Quote"))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(Self.accent)
-                .padding(.bottom, 5)
+            sectionHeader(tr("原话", "Quote"))
             Text(data.quote)
-                .font(.system(size: 12))
-                .foregroundStyle(Color(white: 0.07))
+                .font(.callout)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
-                .background(Self.headerBg)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .background(Color.orange.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
                 .padding(.bottom, 12)
         }
     }
 
     private var questionsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(tr("📍 需要你回答的问题", "📍 Questions for You"))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(Self.accent)
-                .padding(.bottom, 5)
-            ForEach(Array(data.questions.enumerated()), id: \.offset) { index, q in
-                Text("\(numberedCircle(index))  \(q)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(white: 0.07))
-                    .padding(.vertical, 2)
+            sectionHeader(tr("需要你回答的问题", "Questions for You"))
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(data.questions.enumerated()), id: \.offset) { index, q in
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("\(index + 1).")
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(.orange)
+                        Text(q)
+                            .font(.callout)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
         }
         .padding(.bottom, 12)
@@ -166,21 +158,24 @@ public struct NameAlertView: View {
     @ViewBuilder
     private var contextSection: some View {
         if !data.context.isEmpty {
-            Rectangle()
-                .fill(Color(white: 0.87).opacity(0.6))
-                .frame(height: 1)
+            Divider()
                 .padding(.bottom, 10)
-            Text(tr("📋 前后上下文（最近1分钟）", "📋 Surrounding Context (last minute)"))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(Color(white: 0.47))
-                .padding(.bottom, 5)
-            ForEach(Array(data.context.enumerated()), id: \.offset) { _, line in
-                Text(contextText(line))
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color(white: 0.4))
-                    .padding(.vertical, 1)
+            sectionHeader(tr("前后上下文（最近1分钟）", "Surrounding Context (last minute)"))
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(data.context.enumerated()), id: \.offset) { _, line in
+                    Text(contextText(line))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.bottom, 5)
     }
 
     private func contextText(_ line: TranscriptContextLine) -> String {
@@ -196,21 +191,6 @@ public struct NameAlertView: View {
             return s < 60 ? "You were called \(s)s ago!" : "You were called \(s / 60)m \(s % 60)s ago!"
         }
         return s < 60 ? "\(s)秒前有人叫你！" : "\(s / 60)分\(s % 60)秒前有人叫你！"
-    }
-
-    private func numberedCircle(_ index: Int) -> String {
-        switch index {
-        case 0: return "❶"
-        case 1: return "❷"
-        case 2: return "❸"
-        case 3: return "❹"
-        case 4: return "❺"
-        case 5: return "❻"
-        case 6: return "❼"
-        case 7: return "❽"
-        case 8: return "❾"
-        default: return "\(index + 1)."
-        }
     }
 
     private func loadScreenshot() {

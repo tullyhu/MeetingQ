@@ -27,7 +27,7 @@ public enum PinyinHelper {
         "波": "bo",  "博": "bo",  "伯": "bo",  "帛": "bo",
         "蔡": "cai", "采": "cai", "才": "cai", "彩": "cai",
         "灿": "can", "苍": "cang", "曹": "cao",
-        "岑": "cen", "曾": "ceng",
+        "岑": "cen",
         "超": "chao", "朝": "chao", "晁": "chao",
         "晨": "chen", "陈": "chen", "臣": "chen", "辰": "chen", "沉": "chen",
         "程": "cheng", "成": "cheng", "诚": "cheng", "承": "cheng",

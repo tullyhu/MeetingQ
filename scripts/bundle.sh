@@ -43,7 +43,7 @@ mkdir -p "$ROOT/dist"
 
 echo "Compiling ($MODE)..."
 swiftc ${VFS_ARGS[@]+"${VFS_ARGS[@]}"} \
-  -target arm64-apple-macos26.0 \
+  -target arm64-apple-macos15.0 \
   -sdk "$SDK_PATH" \
   -swift-version 5 \
   ${OPT_FLAGS[@]+"${OPT_FLAGS[@]}"} \
@@ -61,10 +61,8 @@ if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
 fi
 
 MM_DEV_KEYCHAIN="$HOME/Library/Keychains/mmdev.keychain-db"
-if [ -z "${CODESIGN_IDENTITY:-}" ] && [ -f "$MM_DEV_KEYCHAIN" ] \
-     && security find-certificate -c "CalledMe Dev" "$MM_DEV_KEYCHAIN" >/dev/null 2>&1; then
+if [ -z "${CODESIGN_IDENTITY:-}" ] && security find-certificate -c "CalledMe Dev" >/dev/null 2>&1; then
   CODESIGN_IDENTITY="CalledMe Dev"
-  CODESIGN_KEYCHAIN="$MM_DEV_KEYCHAIN"
 fi
 
 if [ -n "${CODESIGN_IDENTITY:-}" ]; then
@@ -75,8 +73,18 @@ if [ -n "${CODESIGN_IDENTITY:-}" ]; then
     fi
     KEYCHAIN_ARGS=(--keychain "$CODESIGN_KEYCHAIN")
   fi
+  ENTITLEMENTS="$ROOT/Resources/CalledMe.entitlements"
+  case "$CODESIGN_IDENTITY" in
+    *"Developer ID"*|*"Apple Development"*|*"Distribution"*|*"Mac App Store"*) ;;
+    *)
+      ENTITLEMENTS="$WORKAROUND_DIR/CalledMe-nosandbox.entitlements"
+      cp "$ROOT/Resources/CalledMe.entitlements" "$ENTITLEMENTS"
+      /usr/libexec/PlistBuddy -c "Delete :com.apple.security.app-sandbox" "$ENTITLEMENTS"
+      echo "Self-signed identity detected: building without app sandbox (avoids repeated keychain prompts)"
+      ;;
+  esac
   codesign --force ${KEYCHAIN_ARGS[@]+"${KEYCHAIN_ARGS[@]}"} \
-    --entitlements "$ROOT/Resources/CalledMe.entitlements" \
+    --entitlements "$ENTITLEMENTS" \
     --options runtime \
     --sign "$CODESIGN_IDENTITY" "$APP_DIR"
   echo "Signed with: $CODESIGN_IDENTITY"

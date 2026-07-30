@@ -27,17 +27,22 @@ public final class ConfigurableLlmService: LlmService {
     public init() {}
 
     public func analyze(_ prompt: String) async throws -> String {
-        try await chat(systemPrompt: "你是会议助手，请简洁准确地回答。", userMessage: prompt)
+        try await chat(systemPrompt: tr("你是会议助手，请简洁准确地回答。",
+                                        "You are a meeting assistant. Answer concisely and accurately."),
+                       userMessage: prompt)
     }
 
     public func summarize(_ transcripts: [Transcript]) async throws -> String {
         let combined = transcripts.map(\.text).joined(separator: "\n")
         if combined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "{\"summary\":\"暂无内容\",\"decisions\":[]}"
+            return "{\"summary\":\"\(tr("暂无内容", "No content"))\",\"decisions\":[]}"
         }
-        let prompt = "请分析以下会议转录内容，以JSON格式返回，格式：{\"summary\":\"要点摘要\",\"decisions\":[\"决策1\",\"决策2\"]}\n\n转录内容：\n\(combined)"
+        let prompt = tr(
+            "请分析以下会议转录内容，以JSON格式返回，格式：{\"summary\":\"要点摘要\",\"decisions\":[\"决策1\",\"决策2\"]}\n\n转录内容：\n",
+            "Analyze the following meeting transcript and return JSON in this format: {\"summary\":\"key points\",\"decisions\":[\"decision 1\",\"decision 2\"]}\n\nTranscript:\n") + combined
         return try await chat(
-            systemPrompt: "你是会议纪要助手，请用简洁的中文总结会议内容，只返回JSON，不要其他内容。",
+            systemPrompt: tr("你是会议纪要助手，请用简洁的中文总结会议内容，只返回JSON，不要其他内容。",
+                             "You are a meeting minutes assistant. Summarize the meeting concisely in English. Return JSON only, no other content."),
             userMessage: prompt)
     }
 

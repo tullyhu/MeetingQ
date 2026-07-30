@@ -301,20 +301,37 @@ public final class SettingsViewModel {
         if !userNicknames.trimmingCharacters(in: .whitespaces).isEmpty {
             names += userNicknames.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         }
-        let namesText = names.joined(separator: "、")
-        let prompt = """
-        用户在会议中使用的姓名/昵称为：\(namesText)
+        let namesText = names.joined(separator: tr("、", ", "))
+        let prompt: String
+        if AppLanguage.current.isEnglish {
+            prompt = """
+            The user's name/nicknames used in meetings: \(namesText)
 
-        请列举中文语音识别（ASR）可能将上述每个名字误识别成的常见词语。
-        误识别原因通常是：声调不同、声母/韵母相近、读音相似的常用词。
+            List common words that speech recognition (ASR) might mishear each of these names as.
+            Misrecognition usually comes from similar pronunciation or common homophones.
 
-        要求：
-        - 每个名字列举 2～4 个最可能被误识别成的词
-        - 只列举读音相近的常用汉语词汇，不需要解释
-        - 只返回逗号分隔的词列表，不要任何其他内容
+            Requirements:
+            - List 2-4 most likely misheard words for each name
+            - Only list common words with similar pronunciation, no explanations
+            - Return only a comma-separated list of words, nothing else
 
-        只返回词列表：
-        """
+            Return only the word list:
+            """
+        } else {
+            prompt = """
+            用户在会议中使用的姓名/昵称为：\(namesText)
+
+            请列举中文语音识别（ASR）可能将上述每个名字误识别成的常见词语。
+            误识别原因通常是：声调不同、声母/韵母相近、读音相似的常用词。
+
+            要求：
+            - 每个名字列举 2～4 个最可能被误识别成的词
+            - 只列举读音相近的常用汉语词汇，不需要解释
+            - 只返回逗号分隔的词列表，不要任何其他内容
+
+            只返回词列表：
+            """
+        }
 
         let llm = AppServices.shared.llm
         Task {

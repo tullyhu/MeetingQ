@@ -21,8 +21,6 @@ public struct ScreenshotAlbumView: View {
     public let viewModel: ScreenshotAlbumViewModel
     public var onClose: () -> Void
 
-    private static let selectedBorder = Color(red: 1, green: 0.702, blue: 0.278)
-
     public init(viewModel: ScreenshotAlbumViewModel, onClose: @escaping () -> Void) {
         self.viewModel = viewModel
         self.onClose = onClose
@@ -31,77 +29,63 @@ public struct ScreenshotAlbumView: View {
     public var body: some View {
         VStack(spacing: 0) {
             titleBar
+            Divider()
             previewArea
             if viewModel.hasSelected {
                 Text(viewModel.selectedTimestamp)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Color(white: 0.53))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 12)
                     .padding(.vertical, 4)
             }
-            Rectangle().fill(Color(white: 0.93)).frame(height: 1)
+            Divider()
             thumbnailStrip
         }
         .frame(width: 720, height: 520)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(white: 0.88), lineWidth: 1))
-        .shadow(color: .black.opacity(0.15), radius: 28, y: 6)
+        .background(Color(nsColor: .windowBackgroundColor))
         .onExitCommand { onClose() }
     }
 
     private var titleBar: some View {
         HStack(spacing: 8) {
-            Text("📷").font(.system(size: 14))
-            Text(tr("截图时光轴", "Screenshot Timeline"))
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color(white: 0.07))
+            Label(tr("截图时光轴", "Screenshot Timeline"), systemImage: "photo.on.rectangle.angled")
+                .font(.headline)
             Text(viewModel.countLabel)
-                .font(.system(size: 11))
-                .foregroundStyle(Color(white: 0.67))
-                .padding(.leading, 2)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Spacer()
             Button(action: onClose) {
-                Text("✕")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color(white: 0.53))
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.tertiary)
                     .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
+            .help(tr("关闭", "Close"))
         }
         .padding(.horizontal, 14)
-        .frame(height: 44)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Color(white: 0.88)).frame(height: 1).padding(.horizontal, 40)
-        }
+        .padding(.vertical, 8)
     }
 
     private var previewArea: some View {
         ZStack {
             if !viewModel.hasScreenshots {
-                VStack(spacing: 10) {
-                    Text("📷").font(.system(size: 32))
-                    Text(tr("暂无截图", "No Screenshots"))
-                        .font(.system(size: 14))
-                        .foregroundStyle(Color(white: 0.67))
+                ContentUnavailableView {
+                    Label(tr("暂无截图", "No Screenshots"), systemImage: "photo.on.rectangle")
+                } description: {
                     Text(tr("开始监听后将每 30 秒自动截图", "Screenshots are taken every 30 seconds after listening starts"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(white: 0.73))
                 }
             } else if let img = viewModel.selectedImage {
                 Image(nsImage: img)
                     .resizable()
                     .scaledToFit()
+                    .padding(8)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(white: 0.96))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(white: 0.88), lineWidth: 1))
-        .padding(.horizontal, 10)
-        .padding(.top, 10)
-        .padding(.bottom, 4)
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     private var thumbnailStrip: some View {
@@ -111,11 +95,10 @@ public struct ScreenshotAlbumView: View {
                     thumbnailCell(item)
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
         }
         .frame(height: 104)
-        .background(Color(white: 0.96))
     }
 
     private func thumbnailCell(_ item: AlbumScreenshotItem) -> some View {
@@ -127,21 +110,20 @@ public struct ScreenshotAlbumView: View {
                         .resizable()
                         .scaledToFill()
                 } else {
-                    Color(white: 0.9)
+                    Color(nsColor: .controlBackgroundColor)
                 }
             }
             .frame(width: 120, height: 68)
             .clipped()
-            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
             Text(item.timeLabel)
-                .font(.system(size: 9))
-                .foregroundStyle(Color(white: 0.53))
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(isSelected ? .primary : .secondary)
         }
-        .padding(2)
-        .background(isSelected ? Self.selectedBorder.opacity(0.1) : Color.black.opacity(0.04))
-        .overlay(RoundedRectangle(cornerRadius: 6)
-            .stroke(isSelected ? Self.selectedBorder : Color.clear, lineWidth: 2))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .padding(3)
+        .overlay(RoundedRectangle(cornerRadius: 8)
+            .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
         .onTapGesture { viewModel.select(item) }
     }
 }

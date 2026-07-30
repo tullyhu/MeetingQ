@@ -29,23 +29,30 @@ import Foundation
 public final class DualTrackAsrService: AsrService {
     public static let micUidOffset = 1_000_000
 
-    public let systemTrack = SpeechTranscriberService()
-    public let micTrack = SpeechTranscriberService()
+    public let systemTrack: AsrService
+    public let micTrack: AsrService
 
     public var onTranscript: ((TranscriptEvent) -> Void)?
     public var onError: ((String) -> Void)?
 
     public var isConnected: Bool { systemTrack.isConnected }
 
-    public let systemLabel = "对方"
+    public var systemLabel: String { tr("对方", "Remote") }
 
     public var micLabel: String {
         let name = KeychainStorage.load(StoreKeys.userName)?
             .trimmingCharacters(in: .whitespaces) ?? ""
-        return name.isEmpty ? "我" : name
+        return name.isEmpty ? tr("我", "Me") : name
     }
 
     public init() {
+        if #available(macOS 26.0, *) {
+            systemTrack = SpeechTranscriberService()
+            micTrack = SpeechTranscriberService()
+        } else {
+            systemTrack = LegacySpeechRecognizerService()
+            micTrack = LegacySpeechRecognizerService()
+        }
         systemTrack.onTranscript = { [weak self] e in
             self?.forward(e, isMic: false)
         }

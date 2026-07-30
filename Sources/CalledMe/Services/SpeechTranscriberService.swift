@@ -36,6 +36,7 @@ public enum AsrError: LocalizedError {
     }
 }
 
+@available(macOS 26.0, *)
 public final class SpeechTranscriberService: AsrService {
     private static let inputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false)!
 

@@ -27,16 +27,38 @@ public struct HistoryView: View {
     }
 
     public var body: some View {
-        HSplitView {
-            leftPane
-                .frame(minWidth: 200, idealWidth: 230, maxWidth: 280)
-            rightPane
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        NavigationSplitView {
+            List(selection: $selectedId) {
+                ForEach(vm.sessions) { item in
+                    SessionRow(item: item)
+                        .tag(item.sessionId)
+                }
+            }
+            .listStyle(.sidebar)
+            .searchable(text: $vm.searchText, placement: .sidebar,
+                        prompt: tr("搜索标题或议题", "Search title or topic"))
+            .navigationTitle(tr("历史会议", "History"))
+            .safeAreaInset(edge: .bottom) {
+                Text(vm.statusText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+            }
+            .frame(minWidth: 220)
+        } detail: {
+            detailPane
         }
-        .frame(width: 780, height: 540)
-        .frame(minWidth: 560, minHeight: 380)
+        .frame(minWidth: 640, minHeight: 420)
         .onAppear { vm.refresh() }
         .onChange(of: vm.searchText) { _, _ in vm.applyFilter() }
+        .onChange(of: selectedId) { _, newValue in
+            vm.selectSession(vm.sessions.first { $0.sessionId == newValue })
+        }
+        .onChange(of: vm.sessions.map(\.sessionId)) { _, _ in
+            selectedId = vm.selectedSession?.sessionId
+        }
         .confirmationDialog(tr("确定删除这条会议记录？相关截图文件将一并删除。",
                                "Delete this meeting record? Related screenshot files will also be deleted."),
                             isPresented: $showDeleteConfirm, titleVisibility: .visible) {
@@ -45,131 +67,38 @@ public struct HistoryView: View {
         }
     }
 
-    private var leftPane: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Text("🗂").font(.system(size: 14))
-                Text(tr("历史会议", "Meeting History"))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.39, green: 0.40, blue: 0.95))
-                Spacer()
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 48)
-            Divider()
-
-            TextField(tr("搜索标题或议题关键词", "Search title or topic keywords"), text: $vm.searchText)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: 11))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-            Divider()
-
-            List(selection: $selectedId) {
-                ForEach(vm.sessions) { item in
-                    SessionRow(item: item)
-                        .tag(item.sessionId)
+    @ViewBuilder
+    private var detailPane: some View {
+        if let session = vm.selectedSession {
+            SessionDetailView(session: session, vm: vm)
+                .toolbar {
+                    ToolbarItemGroup {
+                        Menu {
+                            Button(tr("会议纪要 (.md)", "Minutes (.md)")) { vm.exportMarkdown() }
+                            Button(tr("会议纪要 (.html)", "Minutes (.html)")) { vm.exportHtml() }
+                            Button(tr("转写记录 (.txt)", "Transcript (.txt)")) { vm.exportText() }
+                        } label: {
+                            Label(tr("导出", "Export"), systemImage: "square.and.arrow.up")
+                        }
+                        Button(role: .destructive) { showDeleteConfirm = true } label: {
+                            Label(tr("删除", "Delete"), systemImage: "trash")
+                        }
+                    }
                 }
-            }
-            .listStyle(.plain)
-            .onChange(of: selectedId) { _, newValue in
-                vm.selectSession(vm.sessions.first { $0.sessionId == newValue })
-            }
-            .onChange(of: vm.sessions.map(\.sessionId)) { _, _ in
-                selectedId = vm.selectedSession?.sessionId
-            }
-
-            Divider()
-            Text(vm.statusText)
-                .font(.system(size: 10))
-                .foregroundStyle(Color(white: 0.67))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 14)
-                .frame(height: 36)
-        }
-        .background(Color(white: 0.96))
-    }
-
-    private var rightPane: some View {
-        ZStack(alignment: .topTrailing) {
-            if let session = vm.selectedSession {
-                VStack(spacing: 0) {
-                    SessionDetailView(session: session, vm: vm)
-                    Divider()
-                    bottomBar
+                .overlay(alignment: .topTrailing) {
+                    if vm.isLoadingDetail {
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(12)
+                    }
                 }
-            } else {
-                VStack(spacing: 10) {
-                    Text("📂").font(.system(size: 32))
-                    Text(tr("选择一条会议记录", "Select a meeting record"))
-                        .font(.system(size: 13))
-                        .foregroundStyle(Color(white: 0.67))
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-
-            if vm.isLoadingDetail {
-                Text(tr("加载中...", "Loading..."))
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color(red: 0.39, green: 0.40, blue: 0.95))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color(red: 0.93, green: 0.95, blue: 1.0))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                    .padding(.top, 8)
-                    .padding(.trailing, 12)
+        } else {
+            ContentUnavailableView {
+                Label(tr("历史会议", "Meeting History"), systemImage: "clock.arrow.circlepath")
+            } description: {
+                Text(tr("从左侧选择一条会议记录", "Select a meeting record from the sidebar"))
             }
         }
-    }
-
-    private var bottomBar: some View {
-        HStack(spacing: 6) {
-            ActionButton(title: tr("导出会议纪要 (.md)", "Export Minutes (.md)"),
-                         bg: Color(red: 0.93, green: 0.95, blue: 1.0),
-                         fg: Color(red: 0.39, green: 0.40, blue: 0.95)) {
-                vm.exportMarkdown()
-            }
-            ActionButton(title: tr("导出会议纪要 (.html)", "Export Minutes (.html)"),
-                         bg: Color(red: 1.0, green: 0.97, blue: 0.93),
-                         fg: Color(red: 0.92, green: 0.35, blue: 0.05)) {
-                vm.exportHtml()
-            }
-            ActionButton(title: tr("导出转写记录 (.txt)", "Export Transcript (.txt)"),
-                         bg: Color(red: 0.94, green: 0.99, blue: 0.96),
-                         fg: Color(red: 0.09, green: 0.64, blue: 0.29)) {
-                vm.exportText()
-            }
-            Spacer()
-            ActionButton(title: tr("删除此记录", "Delete This Record"),
-                         bg: Color(red: 1.0, green: 0.96, blue: 0.96),
-                         fg: Color(red: 0.94, green: 0.27, blue: 0.27)) {
-                showDeleteConfirm = true
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Color(white: 0.96))
-    }
-}
-
-private struct ActionButton: View {
-    let title: String
-    let bg: Color
-    let fg: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 12))
-                .foregroundStyle(fg)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(bg)
-                .clipShape(RoundedRectangle(cornerRadius: 5))
-                .overlay(RoundedRectangle(cornerRadius: 5).stroke(fg.opacity(0.25), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
     }
 }
 
@@ -179,30 +108,24 @@ private struct SessionRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(item.title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color(white: 0.07))
+                .font(.callout.weight(.medium))
                 .lineLimit(1)
             Text(item.topicsLabel)
-                .font(.system(size: 11))
-                .foregroundStyle(Color(white: 0.53))
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 .lineLimit(2)
-            HStack(spacing: 0) {
+            HStack(spacing: 4) {
+                Text(item.dateLabel)
+                Text("·")
                 Text(item.transcriptCountLabel)
-                    .font(.system(size: 10))
-                    .foregroundStyle(Color(white: 0.67))
                 if item.hasScreenshots {
-                    Text("  ·  ")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color(white: 0.87))
-                    Text("📷")
-                        .font(.system(size: 9))
+                    Image(systemName: "photo.on.rectangle")
                 }
             }
-            Text(item.dateLabel)
-                .font(.system(size: 10))
-                .foregroundStyle(Color(white: 0.67))
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
     }
 }
 
@@ -211,8 +134,8 @@ private struct SectionHeader: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(Color(white: 0.53))
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
             .padding(.bottom, 6)
     }
 }
@@ -225,18 +148,16 @@ private struct SessionDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Text(session.title)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color(white: 0.07))
+                    .font(.title3.weight(.semibold))
                     .padding(.bottom, 4)
                 Text("\(session.dateLabel)  ·  \(session.durationLabel)  ·  \(session.transcriptCountLabel)")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color(white: 0.53))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                     .padding(.bottom, 18)
 
                 SectionHeader(title: tr("议题", "Topics"))
                 Text(session.topicsLabel)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(white: 0.33))
+                    .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 20)
 
@@ -252,17 +173,16 @@ private struct SessionDetailView: View {
 
                 if session.hasDecisions {
                     SectionHeader(title: tr("决策", "Decisions"))
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 4) {
                         ForEach(Array(session.decisions.enumerated()), id: \.offset) { _, d in
-                            HStack(alignment: .top, spacing: 0) {
-                                Text("• ")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(Color(red: 0.09, green: 0.64, blue: 0.29))
+                            Label {
                                 Text(d)
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(Color(white: 0.2))
                                     .fixedSize(horizontal: false, vertical: true)
+                            } icon: {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
                             }
+                            .font(.callout)
                         }
                     }
                     .padding(.bottom, 20)
@@ -270,17 +190,16 @@ private struct SessionDetailView: View {
 
                 if session.hasActionItems {
                     SectionHeader(title: tr("行动项", "Action Items"))
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 4) {
                         ForEach(session.actionItems) { a in
-                            HStack(alignment: .top, spacing: 0) {
-                                Text("→ ")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(Color(red: 0.85, green: 0.47, blue: 0.02))
+                            Label {
                                 Text(a.label)
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(Color(white: 0.2))
                                     .fixedSize(horizontal: false, vertical: true)
+                            } icon: {
+                                Image(systemName: "arrow.right.circle.fill")
+                                    .foregroundStyle(.orange)
                             }
+                            .font(.callout)
                         }
                     }
                     .padding(.bottom, 20)
@@ -288,23 +207,22 @@ private struct SessionDetailView: View {
 
                 if session.hasTranscripts {
                     SectionHeader(title: tr("转录记录", "Transcripts"))
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 8) {
                         ForEach(session.transcripts) { tr in
                             HStack(alignment: .top, spacing: 0) {
                                 Text(tr.timeLabel)
-                                    .font(.system(size: 10, design: .monospaced))
-                                    .foregroundStyle(Color(white: 0.67))
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.tertiary)
                                     .frame(width: 56, alignment: .leading)
                                     .padding(.top, 1)
                                 VStack(alignment: .leading, spacing: 0) {
                                     if let speaker = tr.speaker, !speaker.isEmpty {
                                         Text(speaker)
-                                            .font(.system(size: 10, weight: .semibold))
-                                            .foregroundStyle(Color(red: 0.39, green: 0.40, blue: 0.95))
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(Color.accentColor)
                                     }
                                     Text(tr.text)
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(Color(white: 0.2))
+                                        .font(.callout)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
@@ -312,8 +230,8 @@ private struct SessionDetailView: View {
                     }
                 } else if vm.loadedIds.contains(session.sessionId) {
                     Text(tr("暂无转录记录", "No transcripts"))
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color(white: 0.67))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                         .padding(.top, 8)
                 }
@@ -334,9 +252,16 @@ private struct ScreenshotThumb: View {
                     Image(nsImage: thumb)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
+                } else if item.loadFailed {
+                    Rectangle()
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                        .overlay(
+                            Image(systemName: "photo.badge.exclamationmark")
+                                .foregroundStyle(.tertiary)
+                        )
                 } else {
                     Rectangle()
-                        .fill(Color(white: 0.92))
+                        .fill(Color(nsColor: .controlBackgroundColor))
                         .overlay(
                             ProgressView()
                                 .controlSize(.small)
@@ -344,13 +269,14 @@ private struct ScreenshotThumb: View {
                 }
             }
             .frame(width: 160, height: 90)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
             .contentShape(Rectangle())
             .onTapGesture { HistoryLightbox.open(item) }
             .help(tr("点击放大", "Click to enlarge"))
             Text(item.timeLabel)
-                .font(.system(size: 9, design: .monospaced))
-                .foregroundStyle(Color(white: 0.67))
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.tertiary)
         }
         .task { await item.loadThumbnail() }
     }

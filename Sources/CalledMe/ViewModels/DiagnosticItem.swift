@@ -47,30 +47,30 @@ public final class DiagnosticItem: Identifiable {
 
     public var icon: String {
         switch state {
-        case .pending: return "○"
-        case .running: return "⟳"
-        case .ok: return "✓"
-        case .warning: return "⚠"
-        case .error: return "✕"
+        case .pending: return "circle"
+        case .running: return "arrow.triangle.2.circlepath"
+        case .ok: return "checkmark.circle.fill"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .error: return "xmark.circle.fill"
         }
     }
 
     public var iconColor: Color {
         switch state {
-        case .ok: return Color(mmHex: "4ADE80")
-        case .warning: return Color(mmHex: "FBBF24")
-        case .error: return Color(mmHex: "FF6B6B")
-        case .running: return Color(mmHex: "60A5FA")
-        case .pending: return Color(mmHex: "555555")
+        case .ok: return .green
+        case .warning: return .orange
+        case .error: return .red
+        case .running: return .accentColor
+        case .pending: return Color(nsColor: .tertiaryLabelColor)
         }
     }
 
     public var detailColor: Color {
         switch state {
-        case .error: return Color(mmHex: "EF4444")
-        case .warning: return Color(mmHex: "D97706")
-        case .ok: return Color(mmHex: "16A34A")
-        default: return Color(mmHex: "888888")
+        case .error: return .red
+        case .warning: return .orange
+        case .ok: return .green
+        default: return .secondary
         }
     }
 

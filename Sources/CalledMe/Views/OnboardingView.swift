@@ -56,7 +56,7 @@ public final class OnboardingViewModel: ObservableObject {
                 let reply = try await service.test()
                 testResult = reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     ? tr("连接失败：空响应", "Connection failed: empty response")
-                    : tr("连接成功 ✓", "Connected ✓")
+                    : tr("连接成功", "Connected")
             } catch {
                 testResult = tr("连接失败：", "Connection failed: ") + error.localizedDescription
             }
@@ -65,15 +65,13 @@ public final class OnboardingViewModel: ObservableObject {
     }
 
     public var testSucceeded: Bool {
-        testResult.contains("✓")
+        testResult == tr("连接成功", "Connected")
     }
 }
 
 public struct OnboardingView: View {
     @StateObject private var vm = OnboardingViewModel()
     public var onFinish: () -> Void
-
-    private static let accent = Color(red: 0.388, green: 0.4, blue: 0.945)
 
     public init(onFinish: @escaping () -> Void) {
         self.onFinish = onFinish
@@ -88,7 +86,7 @@ public struct OnboardingView: View {
             HStack(spacing: 6) {
                 ForEach(0..<OnboardingViewModel.totalSteps, id: \.self) { i in
                     Circle()
-                        .fill(i <= vm.step ? Self.accent : Color.gray.opacity(0.3))
+                        .fill(i <= vm.step ? Color.accentColor : Color(nsColor: .separatorColor))
                         .frame(width: 7, height: 7)
                 }
             }
@@ -114,7 +112,6 @@ public struct OnboardingView: View {
                 }
                 Button(nextTitle) { next() }
                     .buttonStyle(.borderedProminent)
-                    .tint(Self.accent)
                     .keyboardShortcut(.defaultAction)
             }
             .padding(24)
@@ -129,18 +126,18 @@ public struct OnboardingView: View {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable().frame(width: 64, height: 64)
             Text(tr("欢迎使用 CalledMe", "Welcome to CalledMe"))
-                .font(.system(size: 20, weight: .bold))
+                .font(.title.weight(.bold))
             Text(tr(
                 "CalledMe 会在会议中实时转写内容，并在有人叫到你名字时立刻提醒你。\n开始前需要授予以下权限：",
                 "CalledMe transcribes your meetings live and alerts you the moment someone says your name.\nTo get started, please grant the following permissions:"))
-                .font(.system(size: 13))
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(6)
-            VStack(alignment: .leading, spacing: 10) {
-                permRow("🎙️", tr("语音识别 — 设备端实时转写", "Speech Recognition — on-device live transcription"))
-                permRow("🖥️", tr("屏幕录制 — 采集系统音频并定时截图", "Screen Recording — captures system audio and periodic screenshots"))
-                permRow("🎤", tr("麦克风（可选）— 同时采集你的发言", "Microphone (optional) — captures your own voice"))
+            VStack(alignment: .leading, spacing: 12) {
+                permRow("waveform", tr("语音识别 — 设备端实时转写", "Speech Recognition — on-device live transcription"))
+                permRow("display", tr("屏幕录制 — 采集系统音频并定时截图", "Screen Recording — captures system audio and periodic screenshots"))
+                permRow("mic", tr("麦克风（可选）— 同时采集你的发言", "Microphone (optional) — captures your own voice"))
             }
             .padding(.top, 6)
             Button(tr("立即授权", "Grant Permissions")) {
@@ -155,26 +152,28 @@ public struct OnboardingView: View {
     private var identityStep: some View {
         VStack(alignment: .leading, spacing: 12) {
             Spacer()
-            Text(tr("👋 先认识你", "👋 Tell Us Who You Are"))
-                .font(.system(size: 18, weight: .bold))
+            Label(tr("先认识你", "Tell Us Who You Are"), systemImage: "person.crop.circle")
+                .font(.title2.weight(.bold))
             Text(tr(
                 "当会议中有人叫到你的名字时，CalledMe 会弹窗提醒你并附上当时的截图与上下文。多个名字用逗号分隔。",
                 "When someone says your name in a meeting, CalledMe pops up an alert with a screenshot and the surrounding context. Separate multiple names with commas."))
-                .font(.system(size: 12))
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineSpacing(5)
             VStack(alignment: .leading, spacing: 4) {
-                Text(tr("姓名", "Your Name")).font(.system(size: 12, weight: .medium))
+                Text(tr("姓名", "Your Name")).font(.callout.weight(.medium))
                 TextField(tr("例如：张伟", "e.g. Alex Chen"), text: $vm.userName)
                     .textFieldStyle(.roundedBorder)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(tr("昵称 / 英文名（可选）", "Nicknames (optional)")).font(.system(size: 12, weight: .medium))
+                Text(tr("昵称 / 英文名（可选）", "Nicknames (optional)")).font(.callout.weight(.medium))
                 TextField(tr("例如：小伟, Will", "e.g. Al, Alex C"), text: $vm.userNicknames)
                     .textFieldStyle(.roundedBorder)
             }
-            Text(tr("💡 语音识别偶尔会把名字听成同音字，CalledMe 会自动学习这些变体。", "💡 Speech recognition sometimes mishears names as homophones — CalledMe learns these variants automatically."))
-                .font(.system(size: 11))
+            Label(tr("语音识别偶尔会把名字听成同音字，CalledMe 会自动学习这些变体。",
+                     "Speech recognition sometimes mishears names as homophones — CalledMe learns these variants automatically."),
+                  systemImage: "lightbulb")
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
             Spacer()
@@ -185,12 +184,12 @@ public struct OnboardingView: View {
     private var llmStep: some View {
         VStack(alignment: .leading, spacing: 12) {
             Spacer()
-            Text(tr("🧠 配置 AI 模型", "🧠 Configure Your AI Model"))
-                .font(.system(size: 18, weight: .bold))
+            Label(tr("配置 AI 模型", "Configure Your AI Model"), systemImage: "brain")
+                .font(.title2.weight(.bold))
             Text(tr(
                 "CalledMe 使用 OpenAI 兼容接口生成摘要和检测议题。推荐在本机通过 oMLX 运行 Qwen3.6 系列多模态大模型——同时理解转写文本与会议截图，零费用、全离线。也可使用任意云端服务。",
                 "CalledMe uses any OpenAI-compatible API for summaries and topic detection. We recommend running a Qwen3.6-series multimodal model locally via oMLX — it understands both transcripts and meeting screenshots, free and fully offline. Cloud services work too."))
-                .font(.system(size: 12))
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineSpacing(5)
             field(tr("接口地址", "Base URL"), tr("oMLX 默认: http://localhost:8000/v1", "oMLX default: http://localhost:8000/v1"), $vm.baseUrl)
@@ -199,10 +198,10 @@ public struct OnboardingView: View {
             HStack(spacing: 10) {
                 Button(tr("测试连接", "Test Connection")) { vm.testLlm() }
                     .disabled(vm.isTesting)
-                if vm.isTesting { ProgressView().scaleEffect(0.7) }
+                if vm.isTesting { ProgressView().controlSize(.small) }
                 if !vm.testResult.isEmpty {
-                    Text(vm.testResult)
-                        .font(.system(size: 11))
+                    Label(vm.testResult, systemImage: vm.testSucceeded ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .font(.caption)
                         .foregroundStyle(vm.testSucceeded ? Color.green : Color.red)
                         .lineLimit(2)
                 }
@@ -215,9 +214,11 @@ public struct OnboardingView: View {
     private var doneStep: some View {
         VStack(spacing: 14) {
             Spacer()
-            Text("🎉").font(.system(size: 44))
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 44))
+                .foregroundStyle(.green)
             Text(tr("一切就绪！", "You're All Set!"))
-                .font(.system(size: 20, weight: .bold))
+                .font(.title.weight(.bold))
             VStack(alignment: .leading, spacing: 12) {
                 guideRow("1", tr("开会前，点击浮动窗的「开始监听」", "Before a meeting, press \"Start Listening\" in the floating window"))
                 guideRow("2", tr("转写实时滚动，议题自动更新", "Transcripts stream in live and topics update automatically"))
@@ -253,28 +254,31 @@ public struct OnboardingView: View {
         onFinish()
     }
 
-    private func permRow(_ icon: String, _ text: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(icon)
-            Text(text).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
+    private func permRow(_ symbol: String, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: symbol)
+                .font(.callout)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 20)
+            Text(text).font(.callout).fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private func guideRow(_ num: String, _ text: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Text(num)
-                .font(.system(size: 11, weight: .bold))
+                .font(.caption.weight(.bold))
                 .foregroundStyle(.white)
                 .frame(width: 20, height: 20)
-                .background(Self.accent)
+                .background(Color.accentColor)
                 .clipShape(Circle())
-            Text(text).font(.system(size: 12.5)).fixedSize(horizontal: false, vertical: true)
+            Text(text).font(.callout).fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private func field(_ label: String, _ placeholder: String, _ binding: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.system(size: 12, weight: .medium))
+            Text(label).font(.callout.weight(.medium))
             TextField(placeholder, text: binding)
                 .textFieldStyle(.roundedBorder)
         }

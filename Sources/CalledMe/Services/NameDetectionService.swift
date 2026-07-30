@@ -159,22 +159,39 @@ public final class NameDetectionServiceImpl: NameDetectionService {
         lock.unlock()
 
         let namesHint = names.isEmpty
-            ? "（用户未配置名字）"
-            : "用户姓名/昵称：\(names.joined(separator: "、"))"
-        let roleHint = role.isEmpty ? "" : "\n用户角色：\(role)（可据此判断该角色相关的职责性问题是否指向该用户）"
+            ? tr("（用户未配置名字）", "(user name not configured)")
+            : tr("用户姓名/昵称：", "User name/nicknames: ") + names.joined(separator: tr("、", ", "))
+        let roleHint = role.isEmpty ? "" : tr("\n用户角色：\(role)（可据此判断该角色相关的职责性问题是否指向该用户）",
+                                              "\nUser role: \(role) (use this to judge whether role-related responsibility questions are directed at this user)")
 
-        let prompt = """
-        \(namesHint)\(roleHint)
+        let prompt: String
+        if AppLanguage.current.isEnglish {
+            prompt = """
+            \(namesHint)\(roleHint)
 
-        会议中说了这句话："\(text)"
+            Someone said this in the meeting: "\(text)"
 
-        请判断这句话是否直接针对上述用户本人：
-        - 判断依据：句中出现用户的姓名或昵称（含语音识别可能造成的同音字误识别），或有明确点名该用户的上下文，或问题明显与其角色职责相关且上下文隐含指向该用户。
-        - 注意：句中出现"你"、"你来"、"你觉得"等泛称，但未出现用户姓名/昵称时，通常是在对其他人说话，应返回 directed=false。
+            Determine whether this sentence is directed at the user above:
+            - Criteria: the sentence contains the user's name or nickname (including possible ASR misrecognitions), or there is clear context addressing this user, or the question clearly relates to the user's role and the context implies it targets them.
+            - Note: generic uses of "you" without the user's name/nickname usually address someone else — return directed=false.
 
-        只返回JSON，格式：{"directed":true,"questions":["具体问题"]}
-        若不是针对用户：{"directed":false,"questions":[]}
-        """
+            Return JSON only, format: {"directed":true,"questions":["the specific questions"]}
+            If not directed at the user: {"directed":false,"questions":[]}
+            """
+        } else {
+            prompt = """
+            \(namesHint)\(roleHint)
+
+            会议中说了这句话："\(text)"
+
+            请判断这句话是否直接针对上述用户本人：
+            - 判断依据：句中出现用户的姓名或昵称（含语音识别可能造成的同音字误识别），或有明确点名该用户的上下文，或问题明显与其角色职责相关且上下文隐含指向该用户。
+            - 注意：句中出现"你"、"你来"、"你觉得"等泛称，但未出现用户姓名/昵称时，通常是在对其他人说话，应返回 directed=false。
+
+            只返回JSON，格式：{"directed":true,"questions":["具体问题"]}
+            若不是针对用户：{"directed":false,"questions":[]}
+            """
+        }
 
         do {
             let response = try await llm.analyze(prompt)

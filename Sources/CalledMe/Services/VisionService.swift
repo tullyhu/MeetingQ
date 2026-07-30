@@ -45,13 +45,19 @@ public final class VisionServiceImpl: VisionService {
 
         let base64 = imageData.base64EncodedString()
         let transcripts = surroundingTranscripts.isEmpty
-            ? "（无）"
+            ? tr("（无）", "(none)")
             : surroundingTranscripts.suffix(6).joined(separator: "\n")
 
-        let topicText = currentTopic ?? "（未检测）"
-        let userMessage = "【会议背景】\n当前议题: " + topicText + "\n\n【截图时间点前后的转写】\n" + transcripts + "\n\n【任务】\n分析截图内容,重点关注:\n1. 屏幕上展示的是什么(文档/幻灯片/数据图表/白板/代码/聊天窗口/其他)\n2. 关键数据、结论或信息\n3. 与当前会议讨论的关联性\n4. 图中可读文字(OCR)\n5. 视频会议UI中正在发言的人的名字(通常在屏幕顶部/底部/角落显示当前讲话人名称，如\"张三 正在发言\"、\"李四 (发言中)\"等)\n\n【重要】仅输出以下 JSON 格式,字段名严格使用英文小写+下划线:\n{\n  \"ai_summary\": \"2~4句描述图中内容和会议关联\",\n  \"content_type\": \"slide/chart/document/whiteboard/code/chat/browser/other\",\n  \"key_entities\": [\"关键词1\", \"关键词2\"],\n  \"key_numbers\": [\"12%\", \"50万\"],\n  \"ocr_text\": \"图中可读文字(关键部分)\",\n  \"meeting_relevance\": \"high/medium/low\",\n  \"sensitivity_level\": \"low/medium/high\",\n  \"active_speaker_name\": \"当前发言人的名字(如能看到)，否则填null\"\n}\n只输出 JSON,不要解释,不要使用中文字段名。"
+        let topicText = currentTopic ?? tr("（未检测）", "(not detected)")
+        let userMessage: String
+        if AppLanguage.current.isEnglish {
+            userMessage = "[Meeting Context]\nCurrent topic: " + topicText + "\n\n[Transcript around the screenshot time]\n" + transcripts + "\n\n[Task]\nAnalyze the screenshot, focusing on:\n1. What is shown on screen (document/slide/chart/whiteboard/code/chat window/other)\n2. Key data, conclusions, or information\n3. Relevance to the current meeting discussion\n4. Readable text in the image (OCR)\n5. The name of the person currently speaking in the video-conference UI (usually shown at the top/bottom/corner, e.g. \"Alex is speaking\")\n\n[Important] Output only the following JSON format, with field names strictly in lowercase English with underscores:\n{\n  \"ai_summary\": \"2-4 sentences describing the image content and its relation to the meeting\",\n  \"content_type\": \"slide/chart/document/whiteboard/code/chat/browser/other\",\n  \"key_entities\": [\"keyword1\", \"keyword2\"],\n  \"key_numbers\": [\"12%\", \"500k\"],\n  \"ocr_text\": \"readable text in the image (key parts)\",\n  \"meeting_relevance\": \"high/medium/low\",\n  \"sensitivity_level\": \"low/medium/high\",\n  \"active_speaker_name\": \"name of the current speaker (if visible), otherwise null\"\n}\nOutput JSON only, no explanations."
+        } else {
+            userMessage = "【会议背景】\n当前议题: " + topicText + "\n\n【截图时间点前后的转写】\n" + transcripts + "\n\n【任务】\n分析截图内容,重点关注:\n1. 屏幕上展示的是什么(文档/幻灯片/数据图表/白板/代码/聊天窗口/其他)\n2. 关键数据、结论或信息\n3. 与当前会议讨论的关联性\n4. 图中可读文字(OCR)\n5. 视频会议UI中正在发言的人的名字(通常在屏幕顶部/底部/角落显示当前讲话人名称，如\"张三 正在发言\"、\"李四 (发言中)\"等)\n\n【重要】仅输出以下 JSON 格式,字段名严格使用英文小写+下划线:\n{\n  \"ai_summary\": \"2~4句描述图中内容和会议关联\",\n  \"content_type\": \"slide/chart/document/whiteboard/code/chat/browser/other\",\n  \"key_entities\": [\"关键词1\", \"关键词2\"],\n  \"key_numbers\": [\"12%\", \"50万\"],\n  \"ocr_text\": \"图中可读文字(关键部分)\",\n  \"meeting_relevance\": \"high/medium/low\",\n  \"sensitivity_level\": \"low/medium/high\",\n  \"active_speaker_name\": \"当前发言人的名字(如能看到)，否则填null\"\n}\n只输出 JSON,不要解释,不要使用中文字段名。"
+        }
 
-        let systemPrompt = "你是会议视觉内容分析助手。请分析这张会议截图并生成结构化描述。"
+        let systemPrompt = tr("你是会议视觉内容分析助手。请分析这张会议截图并生成结构化描述。",
+                              "You are a meeting visual-content analysis assistant. Analyze this meeting screenshot and produce a structured description.")
 
         let response: String
         do {
