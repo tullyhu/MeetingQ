@@ -5,7 +5,7 @@
 **When someone calls your name in a meeting, CalledMe hears it before you do.** — A native macOS AI meeting assistant: on-device live transcription · instant name call-out alerts · multimodal deep understanding · runs fully offline
 
 <p>
-  <img alt="macOS" src="https://img.shields.io/badge/macOS-26%2B-black">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-15%2B-black">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-native-black">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-5.10-orange">
   <img alt="Dependencies" src="https://img.shields.io/badge/dependencies-0-brightgreen">
@@ -42,7 +42,7 @@ CalledMe is built for exactly that moment:
 ## Features
 
 ### 🎙️ Live Speech Transcription (100% On-Device)
-- Built on the new `SpeechAnalyzer / SpeechTranscriber` framework in macOS 26
+- Uses the new `SpeechAnalyzer / SpeechTranscriber` framework on macOS 26, with automatic fallback to on-device `SFSpeechRecognizer` on macOS 15–25
 - Raw audio **never leaves your Mac** — no network required, no recognition quota
 - Bilingual UI (中文 / English); recognition language follows the UI
 
@@ -78,7 +78,7 @@ On a hit: popup alert (can be pinned) → instant screenshot → shows the origi
 - 100% on-device speech recognition; pair with a local LLM for a **fully offline pipeline**
 - All data (transcripts / screenshots / minutes) stays in local SQLite (WAL mode)
 - API keys stored in the macOS Keychain (`WhenUnlockedThisDeviceOnly`)
-- Runs in the App Sandbox with only the necessary entitlements
+- Properly signed builds run in the App Sandbox with only the necessary entitlements (local self-signed builds drop the sandbox to avoid repeated keychain prompts)
 - Privacy notice and recording-compliance reminder shown on first launch
 - **Zero logging**: the app writes no log files at all (the entire logging system has been removed from the source). No telemetry, no analytics, no ads, no crash reporting
 
@@ -109,7 +109,7 @@ cd CalledMe
 VERSION=1.0.0 ./scripts/package-dmg.sh
 ```
 
-**Requirements**: macOS 26+ · Apple Silicon · Xcode 26+ or Command Line Tools (zero third-party dependencies, pure `swiftc` build)
+**Requirements**: runs on macOS 15+ · Apple Silicon; building requires Xcode 26+ or Command Line Tools (macOS 26 SDK; zero third-party dependencies, pure `swiftc` build)
 
 ### First Run (the onboarding walks you through)
 
@@ -130,6 +130,7 @@ VERSION=1.0.0 ./scripts/package-dmg.sh
 - **📷 button**: take a screenshot immediately (bypasses dedup)
 - **⚡ button**: quick summary of the last 100 transcript lines
 - **🔔 button**: manually trigger a name alert (for testing)
+- **↺ button**: clear the current transcript display (asks for confirmation; saved meeting records are not affected)
 - **Self-test**: plays a test utterance to verify the full "capture → recognize → transcribe" pipeline
 
 ### Name-Alert Popup
@@ -157,7 +158,7 @@ VERSION=1.0.0 ./scripts/package-dmg.sh
 | Layer | Technology |
 |-------|-----------|
 | UI | SwiftUI + AppKit (menu bar / floating window / popups) |
-| Speech recognition | Speech framework (SpeechAnalyzer, on-device, Chinese/English follows UI language) |
+| Speech recognition | Speech framework (SpeechAnalyzer on macOS 26+, SFSpeechRecognizer fallback on 15–25; on-device, Chinese/English follows UI language) |
 | Audio capture | ScreenCaptureKit system audio + AVAudioEngine microphone (dual-track independent transcription) |
 | Screenshots | ScreenCaptureKit, 64×36 thumbnail MD5 dedup |
 | LLM | Any OpenAI-compatible API (local oMLX or cloud) |
@@ -203,7 +204,7 @@ CalledMe/
 A: On macOS, capturing "system audio output" (the remote party's voice in a meeting) requires ScreenCaptureKit, which in turn requires Screen Recording permission. Screenshots depend on it too. CalledMe reads no screen or audio data unless you've started listening.
 
 **Q: Are Intel Macs supported?**
-A: No. Local LLMs and on-device recognition depend on Apple Silicon, and the new `SpeechAnalyzer` framework requires macOS 26+.
+A: No. Local LLMs and on-device recognition depend on Apple Silicon. macOS 15+ is required: macOS 15–25 uses on-device `SFSpeechRecognizer`, while macOS 26+ uses the new `SpeechAnalyzer` framework.
 
 **Q: How accurate is the transcription?**
 A: It depends on Apple's on-device speech model; it performs well on clear Mandarin speech. Name recognition can be continuously improved via "ASR homophone variants".

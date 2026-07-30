@@ -5,7 +5,7 @@
 **会议中有人叫你，它比你先听到。** —— macOS 原生 AI 会议助手：本地实时转写 · 被叫秒级提醒 · 多模态深度理解 · 可完全离线运行
 
 <p>
-  <img alt="macOS" src="https://img.shields.io/badge/macOS-26%2B-black">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-15%2B-black">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-native-black">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-5.10-orange">
   <img alt="Dependencies" src="https://img.shields.io/badge/dependencies-0-brightgreen">
@@ -42,7 +42,7 @@ CalledMe 就是为这一刻而生的：
 ## 功能特性
 
 ### 🎙️ 实时语音转写（100% 设备端）
-- 基于 macOS 26 全新的 `SpeechAnalyzer / SpeechTranscriber` 框架
+- macOS 26 使用全新的 `SpeechAnalyzer / SpeechTranscriber` 框架，macOS 15–25 自动回退到设备端 `SFSpeechRecognizer`
 - 原始音频**永远不离开你的 Mac**，无需联网、无识别额度限制
 - 中英文双语界面，识别语言随界面切换
 
@@ -78,7 +78,7 @@ CalledMe 就是为这一刻而生的：
 - 语音识别 100% 设备端；搭配本地 LLM 可实现**全链路离线**
 - 所有数据（转写/截图/纪要）仅存本地 SQLite（WAL 模式）
 - API Key 存于 macOS 系统钥匙串（`WhenUnlockedThisDeviceOnly`）
-- 应用沙盒（App Sandbox）运行，仅申请必要权限
+- 正式签名构建以应用沙盒（App Sandbox）运行，仅申请必要权限（本地自签名构建为免钥匙串重复授权提示会关闭沙盒）
 - 首次启动展示隐私声明与录音合规提示
 - **零日志**：应用不写任何日志文件（源码中已移除整个日志系统），无遥测、无统计、无广告、无崩溃上报
 
@@ -109,7 +109,7 @@ cd CalledMe
 VERSION=1.0.0 ./scripts/package-dmg.sh
 ```
 
-**要求**：macOS 26+ · Apple Silicon · Xcode 26+ 或 Command Line Tools（无需任何第三方依赖，纯 `swiftc` 编译）
+**要求**：运行需 macOS 15+ · Apple Silicon；编译需 Xcode 26+ 或 Command Line Tools（macOS 26 SDK，无需任何第三方依赖，纯 `swiftc` 编译）
 
 ### 首次使用（漫游引导会带你走完）
 
@@ -130,6 +130,7 @@ VERSION=1.0.0 ./scripts/package-dmg.sh
 - **📷 按钮**：立即截图（绕过去重）
 - **⚡ 按钮**：基于最近 100 条转写生成快速摘要
 - **🔔 按钮**：手动触发一次被叫提醒（测试用）
+- **↺ 按钮**：清空当前转写显示（需确认，不影响已保存的会议记录）
 - **功能自检**：播放一段测试语音，验证「采集 → 识别 → 转写」全链路是否正常
 
 ### 被叫提醒弹窗
@@ -157,7 +158,7 @@ VERSION=1.0.0 ./scripts/package-dmg.sh
 | 层级 | 技术 |
 |------|------|
 | UI | SwiftUI + AppKit（菜单栏 / 浮动窗 / 弹窗） |
-| 语音识别 | Speech framework（SpeechAnalyzer，设备端，随界面语言切换中英） |
+| 语音识别 | Speech framework（macOS 26+ SpeechAnalyzer，15–25 回退 SFSpeechRecognizer；设备端，随界面语言切换中英） |
 | 音频采集 | ScreenCaptureKit 系统音频 + AVAudioEngine 麦克风（双轨独立转写） |
 | 截图 | ScreenCaptureKit，64×36 缩略图 MD5 去重 |
 | LLM | 任意 OpenAI 兼容 API（本地 oMLX / 云端均可） |
@@ -203,7 +204,7 @@ CalledMe/
 A: macOS 采集"系统播放的声音"（即会议对方的声音）必须经由 ScreenCaptureKit，而该 API 要求屏幕录制权限。截图功能同样依赖它。CalledMe 不会在你未开始监听时读取任何屏幕/音频数据。
 
 **Q: 支持 Intel Mac 吗？**
-A: 不支持。本地大模型与设备端识别依赖 Apple Silicon，`SpeechAnalyzer` 新框架也要求 macOS 26+。
+A: 不支持。本地大模型与设备端识别依赖 Apple Silicon。运行要求 macOS 15+：macOS 15–25 使用设备端 `SFSpeechRecognizer`，macOS 26+ 使用新的 `SpeechAnalyzer` 框架。
 
 **Q: 转写准确率如何？**
 A: 取决于 Apple 设备端语音模型，中文普通话清晰语音下表现良好。姓名识别可通过"ASR 同音变体"持续优化。
