@@ -70,21 +70,7 @@ public struct HistoryView: View {
     @ViewBuilder
     private var detailPane: some View {
         if let session = vm.selectedSession {
-            SessionDetailView(session: session, vm: vm)
-                .toolbar {
-                    ToolbarItemGroup {
-                        Menu {
-                            Button(tr("会议纪要 (.md)", "Minutes (.md)")) { vm.exportMarkdown() }
-                            Button(tr("会议纪要 (.html)", "Minutes (.html)")) { vm.exportHtml() }
-                            Button(tr("转写记录 (.txt)", "Transcript (.txt)")) { vm.exportText() }
-                        } label: {
-                            Label(tr("导出", "Export"), systemImage: "square.and.arrow.up")
-                        }
-                        Button(role: .destructive) { showDeleteConfirm = true } label: {
-                            Label(tr("删除", "Delete"), systemImage: "trash")
-                        }
-                    }
-                }
+            SessionDetailView(session: session, vm: vm, onDelete: { showDeleteConfirm = true })
                 .overlay(alignment: .topTrailing) {
                     if vm.isLoadingDetail {
                         ProgressView()
@@ -143,10 +129,32 @@ private struct SectionHeader: View {
 private struct SessionDetailView: View {
     let session: SessionItem
     let vm: HistoryViewModel
+    let onDelete: () -> Void
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 10) {
+                    Spacer()
+                    Menu {
+                        Button(tr("会议纪要 (.md)", "Minutes (.md)")) { vm.exportMarkdown() }
+                        Button(tr("会议纪要 (.html)", "Minutes (.html)")) { vm.exportHtml() }
+                        Button(tr("转写记录 (.txt)", "Transcript (.txt)")) { vm.exportText() }
+                    } label: {
+                        Label(tr("导出", "Export"), systemImage: "square.and.arrow.up")
+                            .font(.callout)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.visible)
+                    .fixedSize()
+                    Button(role: .destructive, action: onDelete) {
+                        Label(tr("删除", "Delete"), systemImage: "trash")
+                            .font(.callout)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 12)
                 Text(session.title)
                     .font(.title3.weight(.semibold))
                     .padding(.bottom, 4)

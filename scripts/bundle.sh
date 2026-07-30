@@ -60,7 +60,6 @@ if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
   /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
 fi
 
-MM_DEV_KEYCHAIN="$HOME/Library/Keychains/mmdev.keychain-db"
 if [ -z "${CODESIGN_IDENTITY:-}" ] && security find-certificate -c "CalledMe Dev" >/dev/null 2>&1; then
   CODESIGN_IDENTITY="CalledMe Dev"
 fi

@@ -17,8 +17,9 @@
 import AppKit
 
 @MainActor
-public final class StatusBarController: NSObject {
+public final class StatusBarController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
+    private var menuLanguage: AppLanguage?
 
     public var onQuit: (() -> Void)?
 
@@ -33,12 +34,20 @@ public final class StatusBarController: NSObject {
 
     private func buildMenu() {
         let menu = NSMenu()
+        menu.delegate = self
         menu.addItem(makeItem(tr("显示主窗口", "Show Main Window"), action: #selector(showMainWindow)))
         menu.addItem(makeItem(tr("历史会议…", "Meeting History…"), action: #selector(openHistory)))
         menu.addItem(makeItem(tr("设置…", "Settings…"), action: #selector(openSettings)))
         menu.addItem(.separator())
         menu.addItem(makeItem(tr("退出 CalledMe", "Quit CalledMe"), action: #selector(quit)))
         statusItem.menu = menu
+        menuLanguage = AppLanguage.current
+    }
+
+    public func menuNeedsUpdate(_ menu: NSMenu) {
+        if menuLanguage != AppLanguage.current {
+            buildMenu()
+        }
     }
 
     private func makeItem(_ title: String, action: Selector) -> NSMenuItem {

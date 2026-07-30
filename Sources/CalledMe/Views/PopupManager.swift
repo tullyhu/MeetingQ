@@ -119,13 +119,19 @@ public final class PopupManager: PopupManaging {
             onClose: { [weak self] in self?.dismissNameAlert(id: data.id) },
             onTogglePin: { [weak self] in self?.toggleNameAlertPin(id: data.id) }
         ))
-        let hosting = NSHostingView(rootView: view)
-        hosting.frame = NSRect(origin: .zero, size: NSSize(width: 520, height: 4000))
-        hosting.layoutSubtreeIfNeeded()
-        var size = hosting.fittingSize
-        size.width = 520
+        let sizing = NSHostingView(rootView: NameAlertContent(data: data, screenshot: nil))
+        sizing.frame = NSRect(origin: .zero, size: NSSize(width: 520, height: 10000))
+        sizing.layoutSubtreeIfNeeded()
+        var contentHeight = sizing.fittingSize.height
+        if let path = data.screenshotPath, !path.isEmpty,
+           FileManager.default.fileExists(atPath: path) {
+            contentHeight += 160 + 12 + 22
+        }
+        let chromeHeight: CGFloat = 46 + 50 + 2
         let maxHeight = max((NSScreen.main?.visibleFrame.height ?? 800) - 40, 300)
-        size.height = min(max(size.height, 120), maxHeight)
+        let height = min(max(contentHeight + chromeHeight, 160), maxHeight)
+        let size = NSSize(width: 520, height: height)
+        let hosting = NSHostingView(rootView: view)
         let panel = makePanel(contentSize: size, transparentBackground: true)
         hosting.frame = NSRect(origin: .zero, size: size)
         panel.contentView = hosting

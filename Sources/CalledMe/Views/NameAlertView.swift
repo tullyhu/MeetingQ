@@ -45,13 +45,7 @@ public struct NameAlertView: View {
             header
             Divider()
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    screenshotSection
-                    quoteSection
-                    questionsSection
-                    contextSection
-                }
-                .padding(EdgeInsets(top: 10, leading: 14, bottom: 14, trailing: 14))
+                NameAlertContent(data: data, screenshot: screenshot)
             }
             Divider()
             HStack {
@@ -103,6 +97,40 @@ public struct NameAlertView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+
+    private func elapsedText(at now: Date) -> String {
+        let s = max(0, Int(now.timeIntervalSince(data.detectedAt)))
+        if AppLanguage.current.isEnglish {
+            return s < 60 ? "You were called \(s)s ago!" : "You were called \(s / 60)m \(s % 60)s ago!"
+        }
+        return s < 60 ? "\(s)秒前有人叫你！" : "\(s / 60)分\(s % 60)秒前有人叫你！"
+    }
+
+    private func loadScreenshot() {
+        guard let path = data.screenshotPath, !path.isEmpty,
+              FileManager.default.fileExists(atPath: path) else { return }
+        screenshot = NSImage(contentsOfFile: path)
+    }
+}
+
+public struct NameAlertContent: View {
+    public let data: NameAlertData
+    public let screenshot: NSImage?
+
+    public init(data: NameAlertData, screenshot: NSImage?) {
+        self.data = data
+        self.screenshot = screenshot
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            screenshotSection
+            quoteSection
+            questionsSection
+            contextSection
+        }
+        .padding(EdgeInsets(top: 10, leading: 14, bottom: 14, trailing: 14))
     }
 
     @ViewBuilder
@@ -183,20 +211,6 @@ public struct NameAlertView: View {
             return "\(line.time) \(speaker): \(line.text)"
         }
         return "\(line.time) \(line.text)"
-    }
-
-    private func elapsedText(at now: Date) -> String {
-        let s = max(0, Int(now.timeIntervalSince(data.detectedAt)))
-        if AppLanguage.current.isEnglish {
-            return s < 60 ? "You were called \(s)s ago!" : "You were called \(s / 60)m \(s % 60)s ago!"
-        }
-        return s < 60 ? "\(s)秒前有人叫你！" : "\(s / 60)分\(s % 60)秒前有人叫你！"
-    }
-
-    private func loadScreenshot() {
-        guard let path = data.screenshotPath, !path.isEmpty,
-              FileManager.default.fileExists(atPath: path) else { return }
-        screenshot = NSImage(contentsOfFile: path)
     }
 }
 
