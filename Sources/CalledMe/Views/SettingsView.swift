@@ -29,6 +29,8 @@ public struct SettingsView: View {
     public var body: some View {
         VStack(spacing: 0) {
             TabView {
+                generalTab
+                    .tabItem { Label(tr("通用", "General"), systemImage: "gearshape") }
                 identityTab
                     .tabItem { Label(tr("个人身份", "Identity"), systemImage: "person.crop.circle") }
                 llmTab
@@ -70,6 +72,22 @@ public struct SettingsView: View {
             Text(tr("这将删除数据库记录并删除磁盘上的截图文件，此操作不可撤销。",
                     "This will delete database records and screenshot files on disk. This cannot be undone."))
         }
+    }
+
+    // MARK: - Tab 0: 通用
+
+    private var generalTab: some View {
+        Form {
+            Section {
+                Toggle(tr("在 Dock 中显示图标", "Show Dock Icon"), isOn: $vm.showDockIcon)
+            } header: {
+                Text(tr("程序坞", "Dock"))
+            } footer: {
+                Text(tr("开启后应用图标会显示在 Dock 中；关闭后仅保留菜单栏图标。",
+                        "When enabled, the app icon appears in the Dock; when disabled, only the menu bar icon remains."))
+            }
+        }
+        .formStyle(.grouped)
     }
 
     // MARK: - Tab 1: 个人身份
@@ -291,7 +309,10 @@ public struct SettingsView: View {
             }
             Spacer()
             Button(tr("测试 LLM", "Test LLM")) { vm.testConnection() }
-            Button(tr("保存设置", "Save")) { vm.saveSettings() }
+            Button(tr("保存设置", "Save")) {
+                vm.saveSettings()
+                WindowRouter.closeSettings()
+            }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
         }

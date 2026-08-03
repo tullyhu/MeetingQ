@@ -82,6 +82,13 @@ public final class SettingsViewModel {
     public var micEnabled: Bool = false
     public var micDeviceName: String = ""
 
+    public var showDockIcon: Bool = true {
+        didSet {
+            guard showDockIcon != oldValue else { return }
+            NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
+        }
+    }
+
     public var llmProfiles: [LlmProfileItem] = []
     public var selectedProfile: LlmProfileItem?
     public var availableModels: [String] = []
@@ -113,6 +120,22 @@ public final class SettingsViewModel {
     public var statsLoading: Bool = false
 
     private var savedDataDirectory: String = ""
+    private var savedSignature: String = ""
+
+    public var hasUnsavedChanges: Bool { currentSignature() != savedSignature }
+
+    private func currentSignature() -> String {
+        var parts = [
+            userName, userNicknames, userAsrVariants, userRole,
+            micEnabled ? "1" : "0", micDeviceName,
+            showDockIcon ? "1" : "0", dataDirectory,
+        ]
+        if let data = try? JSONEncoder().encode(llmProfiles.map { $0.toModel() }),
+           let json = String(data: data, encoding: .utf8) {
+            parts.append(json)
+        }
+        return parts.joined(separator: "\u{1F}")
+    }
 
     public init() {
         loadFromStorage()
@@ -127,12 +150,16 @@ public final class SettingsViewModel {
         micEnabled = KeychainStorage.loadBool(StoreKeys.micEnabled)
         micDeviceName = KeychainStorage.load(StoreKeys.micDeviceName) ?? ""
 
+        showDockIcon = KeychainStorage.loadBool(StoreKeys.showDockIcon, default: true)
+
         dataDirectory = StorageConfig.storageDir
         savedDataDirectory = dataDirectory
         dataDirStatus = ""
 
         llmProfiles = LlmProfileStore.load().map { LlmProfileItem.fromModel($0) }
         selectedProfile = llmProfiles.first(where: \.isActive) ?? llmProfiles.first
+
+        savedSignature = currentSignature()
     }
 
     // MARK: - LLM profiles
@@ -257,6 +284,7 @@ public final class SettingsViewModel {
         KeychainStorage.save(StoreKeys.userRole, value: userRole)
         KeychainStorage.saveBool(StoreKeys.micEnabled, micEnabled)
         KeychainStorage.save(StoreKeys.micDeviceName, value: micDeviceName)
+        KeychainStorage.saveBool(StoreKeys.showDockIcon, showDockIcon)
 
         let currentDir = StorageConfig.storageDir
         if !dataDirectory.trimmingCharacters(in: .whitespaces).isEmpty, dataDirectory != currentDir {
@@ -271,6 +299,8 @@ public final class SettingsViewModel {
         LlmProfileStore.save(llmProfiles.map { $0.toModel() })
 
         AppServices.shared.nameDetection.reloadNames()
+
+        savedSignature = currentSignature()
 
         if dataDirectory != savedDataDirectory {
             savedDataDirectory = dataDirectory

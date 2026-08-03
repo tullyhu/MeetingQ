@@ -22,6 +22,7 @@ MainActor.assumeIsolated {
     let delegate = AppDelegate()
     appDelegate = delegate
     app.delegate = delegate
-    app.setActivationPolicy(.accessory)
+    let showDockIcon = KeychainStorage.loadBool(StoreKeys.showDockIcon, default: true)
+    app.setActivationPolicy(showDockIcon ? .regular : .accessory)
 }
 app.run()

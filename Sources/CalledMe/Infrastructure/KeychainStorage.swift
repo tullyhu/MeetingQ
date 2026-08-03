@@ -61,6 +61,11 @@ public enum KeychainStorage {
         load(key) == "1"
     }
 
+    public static func loadBool(_ key: String, default defaultValue: Bool) -> Bool {
+        guard let raw = load(key) else { return defaultValue }
+        return raw == "1"
+    }
+
     public static func delete(_ key: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,

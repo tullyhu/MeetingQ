@@ -18,6 +18,7 @@ import Foundation
 
 public extension Notification.Name {
     static let mmOpenSettings = Notification.Name("CalledMe.OpenSettings")
+    static let mmCloseSettings = Notification.Name("CalledMe.CloseSettings")
     static let mmOpenHistory = Notification.Name("CalledMe.OpenHistory")
     static let mmShowMainWindow = Notification.Name("CalledMe.ShowMainWindow")
     static let mmHideMainWindow = Notification.Name("CalledMe.HideMainWindow")
@@ -27,6 +28,7 @@ public extension Notification.Name {
 
 public enum WindowRouter {
     public static func openSettings() { NotificationCenter.default.post(name: .mmOpenSettings, object: nil) }
+    public static func closeSettings() { NotificationCenter.default.post(name: .mmCloseSettings, object: nil) }
     public static func openHistory() { NotificationCenter.default.post(name: .mmOpenHistory, object: nil) }
     public static func showMainWindow() { NotificationCenter.default.post(name: .mmShowMainWindow, object: nil) }
     public static func hideMainWindow() { NotificationCenter.default.post(name: .mmHideMainWindow, object: nil) }

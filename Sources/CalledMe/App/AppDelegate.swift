@@ -18,10 +18,11 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusBar: StatusBarController?
     private var mainWindow: NSWindow?
     private var settingsWindow: NSWindow?
+    private let settingsVM = SettingsViewModel()
     private var historyWindow: NSWindow?
     private var privacyWindow: NSWindow?
     private var languageWindow: NSWindow?
@@ -49,6 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         nc.addObserver(forName: .mmOpenSettings, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.showSettingsWindow() }
         }
+        nc.addObserver(forName: .mmCloseSettings, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.settingsWindow?.close() }
+        }
         nc.addObserver(forName: .mmOpenHistory, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.showHistoryWindow() }
         }
@@ -74,6 +78,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard sender == settingsWindow, settingsVM.hasUnsavedChanges else { return true }
+        let alert = NSAlert()
+        alert.messageText = tr("设置尚未保存", "Unsaved Changes")
+        alert.informativeText = tr("你修改了设置但尚未保存。关闭前要保存吗？",
+                                   "You have unsaved changes. Do you want to save them before closing?")
+        alert.addButton(withTitle: tr("保存并关闭", "Save and Close"))
+        alert.addButton(withTitle: tr("不保存", "Don't Save"))
+        alert.addButton(withTitle: tr("取消", "Cancel"))
+        alert.alertStyle = .warning
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            settingsVM.saveSettings()
+            return true
+        case .alertSecondButtonReturn:
+            settingsVM.loadFromStorage()
+            return true
+        default:
+            return false
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -121,7 +147,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 backing: .buffered, defer: false)
             w.title = tr("设置", "Settings")
             w.isReleasedWhenClosed = false
-            w.contentView = NSHostingView(rootView: SettingsView())
+            w.delegate = self
+            w.contentView = NSHostingView(rootView: SettingsView(vm: settingsVM))
             w.center()
             settingsWindow = w
         }
