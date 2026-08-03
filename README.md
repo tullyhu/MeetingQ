@@ -87,6 +87,7 @@ CalledMe 就是为这一刻而生的：
 - 四步漫游引导：授权 → 填写姓名 → 配置模型 → 上手
 - 8 步功能自检：一键诊断音频采集、识别、转写全链路
 - 菜单栏常驻 + 可拖动浮动小窗，单实例运行
+- 可选在 Dock 中显示图标（设置 → 通用，默认开启）
 
 ## 快速开始
 
@@ -106,7 +107,7 @@ cd CalledMe
 ./scripts/bundle.sh
 
 # 生成 DMG
-VERSION=1.0.0 ./scripts/package-dmg.sh
+VERSION=1.1.0 ./scripts/package-dmg.sh
 ```
 
 **要求**：运行需 macOS 15+ · Apple Silicon；编译需 Xcode 26+ 或 Command Line Tools（macOS 26 SDK，无需任何第三方依赖，纯 `swiftc` 编译）

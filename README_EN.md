@@ -87,6 +87,7 @@ On a hit: popup alert (can be pinned) → instant screenshot → shows the origi
 - 4-step onboarding: permissions → your name → model setup → ready
 - 8-step self-diagnostics: one-click diagnosis of audio capture, recognition and transcription
 - Menu-bar resident + draggable floating window, single-instance
+- Optional Dock icon (Settings → General, on by default)
 
 ## Getting Started
 
@@ -106,7 +107,7 @@ cd CalledMe
 ./scripts/bundle.sh
 
 # Generate a DMG
-VERSION=1.0.0 ./scripts/package-dmg.sh
+VERSION=1.1.0 ./scripts/package-dmg.sh
 ```
 
 **Requirements**: runs on macOS 15+ · Apple Silicon; building requires Xcode 26+ or Command Line Tools (macOS 26 SDK; zero third-party dependencies, pure `swiftc` build)
