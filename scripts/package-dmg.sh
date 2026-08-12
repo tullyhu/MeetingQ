@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_NAME="CalledMe"
-VERSION="${VERSION:-1.1.1}"
+VERSION="${VERSION:-1.1.2}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_DIR="$ROOT/dist/${APP_NAME}.app"
 DMG_PATH="$ROOT/dist/${APP_NAME}-${VERSION}.dmg"

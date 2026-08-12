@@ -108,7 +108,7 @@ cd CalledMe
 ./scripts/bundle.sh
 
 # 生成 DMG
-VERSION=1.1.1 ./scripts/package-dmg.sh
+VERSION=1.1.2 ./scripts/package-dmg.sh
 ```
 
 **要求**：运行需 macOS 15+ · Apple Silicon；编译需 Xcode 26+ 或 Command Line Tools（macOS 26 SDK，无需任何第三方依赖，纯 `swiftc` 编译）
@@ -153,7 +153,8 @@ VERSION=1.1.1 ./scripts/package-dmg.sh
 | 内容 | 位置 |
 |------|------|
 | 数据库 / 截图 | `~/Library/Application Support/CalledMe/` |
-| API Key / 配置 | macOS 钥匙串（service: CalledMe） |
+| API Key | macOS 钥匙串（service: CalledMe） |
+| 应用配置 | UserDefaults（普通配置不进钥匙串，避免应用更新后反复弹授权框） |
 
 ## 技术栈
 

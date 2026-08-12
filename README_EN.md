@@ -108,7 +108,7 @@ cd CalledMe
 ./scripts/bundle.sh
 
 # Generate a DMG
-VERSION=1.1.1 ./scripts/package-dmg.sh
+VERSION=1.1.2 ./scripts/package-dmg.sh
 ```
 
 **Requirements**: runs on macOS 15+ · Apple Silicon; building requires Xcode 26+ or Command Line Tools (macOS 26 SDK; zero third-party dependencies, pure `swiftc` build)
@@ -153,7 +153,8 @@ VERSION=1.1.1 ./scripts/package-dmg.sh
 | Content | Location |
 |---------|----------|
 | Database / screenshots | `~/Library/Application Support/CalledMe/` |
-| API keys / settings | macOS Keychain (service: CalledMe) |
+| API keys | macOS Keychain (service: CalledMe) |
+| App settings | UserDefaults (plain config stays out of the Keychain, so app updates don't retrigger authorization prompts) |
 
 ## Tech Stack
 

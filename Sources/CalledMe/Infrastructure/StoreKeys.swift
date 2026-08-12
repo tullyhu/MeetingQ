@@ -30,4 +30,10 @@ public enum StoreKeys {
     public static let appLanguage = "app_language"
     public static let onboardingDone = "onboarding_done"
     public static let showDockIcon = "show_dock_icon"
+
+    public static let all = [
+        userName, userNicknames, userAsrVariants, userRole, llmProfiles,
+        captureWindowTitle, micEnabled, micDeviceName, privacyAccepted,
+        multimodalEnabled, appLanguage, onboardingDone, showDockIcon,
+    ]
 }
