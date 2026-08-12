@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var settingsWindow: NSWindow?
     private let settingsVM = SettingsViewModel()
     private var historyWindow: NSWindow?
+    private let historyVM = HistoryViewModel()
     private var privacyWindow: NSWindow?
     private var languageWindow: NSWindow?
     private var onboardingWindow: NSWindow?
@@ -104,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         PopupManager.shared.dismissAll()
+        DataStore.shared.endMonitoringSessions()
         let audio = AppServices.shared.audio
         let asr = AppServices.shared.asr
         let screen = AppServices.shared.screen
@@ -165,10 +167,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             w.title = tr("历史会议", "Meeting History")
             w.minSize = NSSize(width: 560, height: 380)
             w.isReleasedWhenClosed = false
-            w.contentView = NSHostingView(rootView: HistoryView())
+            w.contentView = NSHostingView(rootView: HistoryView(vm: historyVM))
             w.center()
             historyWindow = w
         }
+        historyVM.refresh()
         historyWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }

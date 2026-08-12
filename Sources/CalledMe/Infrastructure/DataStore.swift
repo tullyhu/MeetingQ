@@ -388,6 +388,14 @@ public final class DataStore {
         return s
     }
 
+    public func endMonitoringSessions() {
+        run("UPDATE sessions SET end_time=?, status=? WHERE status=?") { stmt in
+            bind(stmt, 1, Date())
+            bind(stmt, 2, SessionStatus.ended.rawValue)
+            bind(stmt, 3, SessionStatus.monitoring.rawValue)
+        }
+    }
+
     public func fetchSessions() -> [MeetingSession] {
         query("SELECT id,start_time,end_time,status,title,summary FROM sessions ORDER BY start_time DESC", map: mapSession)
     }

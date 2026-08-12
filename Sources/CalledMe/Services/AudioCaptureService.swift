@@ -220,6 +220,10 @@ public final class AudioCaptureServiceImpl: AudioCaptureService {
         do {
             let engine = AVAudioEngine()
             let input = engine.inputNode
+            // Voice processing enables the OS acoustic echo canceller so the
+            // remote party's voice played through speakers is not re-captured
+            // by the mic. Fall back to a plain tap if unavailable.
+            try? input.setVoiceProcessingEnabled(true)
             if let preferred = KeychainStorage.load(StoreKeys.micDeviceName), !preferred.isEmpty {
                 if let deviceID = findInputDeviceID(matching: preferred) {
                     var id = deviceID

@@ -52,6 +52,7 @@ public struct HistoryView: View {
         }
         .frame(minWidth: 640, minHeight: 420)
         .onAppear { vm.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: .mmSessionEnded)) { _ in vm.refresh() }
         .onChange(of: vm.searchText) { _, _ in vm.applyFilter() }
         .onChange(of: selectedId) { _, newValue in
             vm.selectSession(vm.sessions.first { $0.sessionId == newValue })

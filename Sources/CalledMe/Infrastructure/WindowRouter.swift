@@ -24,6 +24,7 @@ public extension Notification.Name {
     static let mmHideMainWindow = Notification.Name("CalledMe.HideMainWindow")
     static let mmRunSelfTest = Notification.Name("CalledMe.RunSelfTest")
     static let mmScreenCapturePermissionGranted = Notification.Name("CalledMe.ScreenCapturePermissionGranted")
+    static let mmSessionEnded = Notification.Name("CalledMe.SessionEnded")
 }
 
 public enum WindowRouter {

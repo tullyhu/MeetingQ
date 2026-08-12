@@ -48,6 +48,7 @@ CalledMe is built for exactly that moment:
 
 ### 🗣️ Dual-Track Speaker Identification
 - **Independent mic and system-audio tracks**: your speech is attributed with 100% accuracy (shown under your name); remote participants go to the "other party" track — no voiceprint models needed, physical channel isolation can't mix people up
+- **Speakerphone echo cancellation**: OS-level AEC on mic capture plus cross-track text dedup — on speakers, the remote voice is never re-captured by the mic and shown as your own words
 - **Automatic naming at meeting end**: weighted voting correlates transcript timestamps with "currently speaking" names OCR'd from screenshots; a name is only assigned when the evidence clearly converges — multi-party remote meetings stay labeled "other party" rather than risk a wrong guess
 - Transcripts and minutes are segmented by speaker, so it's clear who said what
 
@@ -107,7 +108,7 @@ cd CalledMe
 ./scripts/bundle.sh
 
 # Generate a DMG
-VERSION=1.1.0 ./scripts/package-dmg.sh
+VERSION=1.1.1 ./scripts/package-dmg.sh
 ```
 
 **Requirements**: runs on macOS 15+ · Apple Silicon; building requires Xcode 26+ or Command Line Tools (macOS 26 SDK; zero third-party dependencies, pure `swiftc` build)

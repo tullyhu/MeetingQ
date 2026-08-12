@@ -96,6 +96,9 @@ public final class FloatingWindowViewModel {
     // Per-track in-progress partial results, keyed by speaker label ("" = unlabeled single track)
     private struct TrackPartial { var text = ""; var uid = -1 }
     private var trackPartials: [String: TrackPartial] = [:]
+    // Recent remote-track utterances, used to drop mic-track echo of the
+    // remote party's voice when listening on speakers.
+    private var recentRemoteUtterances: [(time: Date, text: String)] = []
     private var lastNameAlertFiredAt = Date.distantPast
 
     private var currentSession: MeetingSession?
@@ -391,7 +394,18 @@ public final class FloatingWindowViewModel {
         await audio.stop()
         await asr.disconnect()
 
+        if let topic = currentTopicRef {
+            for (key, partial) in trackPartials {
+                let text = partial.text.trimmingCharacters(in: .whitespaces)
+                guard !text.isEmpty else { continue }
+                let label = key.isEmpty ? nil : key
+                if let label, label == Self.resolvedSelfLabel, isEchoOfRemote(text) { continue }
+                appendHistory(text, speaker: label)
+                saveTranscript(topic: topic, text: text, speakerLabel: label)
+            }
+        }
         trackPartials.removeAll()
+        recentRemoteUtterances.removeAll()
 
         isMonitoring = false
         statusText = tr("已停止", "Stopped")
@@ -1016,7 +1030,6 @@ public final class FloatingWindowViewModel {
             if !e.text.trimmingCharacters(in: .whitespaces).isEmpty {
                 committedText = e.text
                 committedLabel = e.speakerLabel
-                appendHistory(e.text, speaker: e.speakerLabel)
             }
             partial.text = ""
             partial.uid = -1
@@ -1027,12 +1040,27 @@ public final class FloatingWindowViewModel {
             if (uidChanged || lengthReset), !partial.text.trimmingCharacters(in: .whitespaces).isEmpty {
                 committedText = partial.text
                 committedLabel = e.speakerLabel
-                appendHistory(partial.text, speaker: e.speakerLabel)
             }
             partial.text = e.text
             partial.uid = e.utteranceId
         }
         trackPartials[trackKey] = partial
+
+        if let committed = committedText {
+            if let label = committedLabel, label == Self.resolvedSelfLabel {
+                // The mic re-capturing the remote party's voice from speakers
+                // would show the same sentence as "mine" — drop the echo.
+                if isEchoOfRemote(committed) {
+                    committedText = nil
+                    committedLabel = nil
+                }
+            } else {
+                recordRemoteUtterance(committed)
+            }
+        }
+        if let committed = committedText {
+            appendHistory(committed, speaker: committedLabel)
+        }
 
         var lines = Array(transcriptHistory.suffix(25))
         for key in trackPartials.keys.sorted() {
@@ -1138,6 +1166,52 @@ public final class FloatingWindowViewModel {
         timestampedHistory.append((Date(), line))
         if transcriptHistory.count > 200 { transcriptHistory.removeFirst() }
         if timestampedHistory.count > 60 { timestampedHistory.removeFirst() }
+    }
+
+    private static let echoWindowSeconds: TimeInterval = 12
+
+    private func recordRemoteUtterance(_ text: String) {
+        let now = Date()
+        recentRemoteUtterances.removeAll { now.timeIntervalSince($0.time) > Self.echoWindowSeconds }
+        recentRemoteUtterances.append((now, text))
+        if recentRemoteUtterances.count > 50 { recentRemoteUtterances.removeFirst(recentRemoteUtterances.count - 50) }
+    }
+
+    private func isEchoOfRemote(_ text: String) -> Bool {
+        let now = Date()
+        recentRemoteUtterances.removeAll { now.timeIntervalSince($0.time) > Self.echoWindowSeconds }
+        let a = Self.normalizeForEchoCompare(text)
+        guard a.count >= 4 else { return false }
+        for entry in recentRemoteUtterances {
+            let b = Self.normalizeForEchoCompare(entry.text)
+            guard b.count >= 4 else { continue }
+            if a == b || a.contains(b) || b.contains(a) { return true }
+            if Self.echoSimilarity(a, b) >= 0.8 { return true }
+        }
+        return false
+    }
+
+    private static func normalizeForEchoCompare(_ s: String) -> String {
+        String(s.lowercased().filter { $0.isLetter || $0.isNumber }.prefix(120))
+    }
+
+    private static func echoSimilarity(_ a: String, _ b: String) -> Double {
+        let ca = Array(a), cb = Array(b)
+        let n = ca.count, m = cb.count
+        guard n > 0, m > 0 else { return 0 }
+        if abs(n - m) > max(n, m) / 4 { return 0 }
+        var prev = [Int](0...m)
+        var curr = [Int](repeating: 0, count: m + 1)
+        for i in 1...n {
+            curr[0] = i
+            for j in 1...m {
+                curr[j] = ca[i - 1] == cb[j - 1]
+                    ? prev[j - 1]
+                    : min(prev[j - 1], prev[j], curr[j - 1]) + 1
+            }
+            swap(&prev, &curr)
+        }
+        return 1.0 - Double(prev[m]) / Double(max(n, m))
     }
 
     private func waitForSelfTestTranscript(timeout: Double) async -> String {
@@ -1475,6 +1549,11 @@ public final class FloatingWindowViewModel {
     }
 
     private func endSession(_ session: MeetingSession, finalTopic: Topic?) async {
+        session.endTime = Date()
+        session.status = .ended
+        DataStore.shared.update(session)
+        NotificationCenter.default.post(name: .mmSessionEnded, object: nil)
+
         if let finalTopic {
             currentTopicRef = finalTopic
             await closeCurrentTopic(waitForSummary: true)
@@ -1532,6 +1611,7 @@ public final class FloatingWindowViewModel {
         session.endTime = Date()
         session.status = .ended
         DataStore.shared.update(session)
+        NotificationCenter.default.post(name: .mmSessionEnded, object: nil)
     }
 
     private static func buildFinalSummaryPrompt(session: MeetingSession, topics: [Topic], screenshots: [Screenshot]) -> String {
