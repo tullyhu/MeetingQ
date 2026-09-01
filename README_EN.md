@@ -79,7 +79,7 @@ On a hit: popup alert (can be pinned) → instant screenshot → shows the origi
 - **Never records meeting audio/video**: audio flows through memory for recognition only and is discarded after transcription; the app never creates or saves any audio/video recordings — only text transcripts and screenshots are kept locally
 - 100% on-device speech recognition; pair with a local LLM for a **fully offline pipeline**
 - All data (transcripts / screenshots / minutes) stays in local SQLite (WAL mode)
-- API keys stored in the macOS Keychain (`WhenUnlockedThisDeviceOnly`)
+- API keys encrypted with a machine-bound key (AES-GCM) and stored in UserDefaults — never in plain text, never in the Keychain, so app updates never trigger Keychain authorization prompts
 - Properly signed builds run in the App Sandbox with only the necessary entitlements (local self-signed builds drop the sandbox to avoid repeated keychain prompts)
 - Privacy notice and recording-compliance reminder shown on first launch
 - **Zero logging**: the app writes no log files at all (the entire logging system has been removed from the source). No telemetry, no analytics, no ads, no crash reporting
@@ -109,7 +109,7 @@ cd CalledMe
 ./scripts/bundle.sh
 
 # Generate a DMG
-VERSION=1.2.0 ./scripts/package-dmg.sh
+VERSION=1.2.1 ./scripts/package-dmg.sh
 ```
 
 **Requirements**: runs on macOS 15+ · Apple Silicon; building requires Xcode 26+ or Command Line Tools (macOS 26 SDK; zero third-party dependencies, pure `swiftc` build)
@@ -154,8 +154,8 @@ VERSION=1.2.0 ./scripts/package-dmg.sh
 | Content | Location |
 |---------|----------|
 | Database / screenshots | `~/Library/Application Support/CalledMe/` |
-| API keys | macOS Keychain (service: CalledMe) |
-| App settings | UserDefaults (plain config stays out of the Keychain, so app updates don't retrigger authorization prompts) |
+| API keys | UserDefaults (AES-GCM encrypted with a machine-bound key; legacy Keychain items migrate automatically) |
+| App settings | UserDefaults |
 
 ## Tech Stack
 

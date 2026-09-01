@@ -49,8 +49,8 @@ public struct PrivacyNoticeView: View {
                         .padding(.bottom, 14)
 
                     section("network", tr("网络请求", "Network Requests"), tr(
-                        "会议语音在设备端实时转写，转录文本会发送至您配置的大语言模型（LLM）接口以生成摘要。所有 API Key 存储在 macOS 系统钥匙串中，不会离开本机。",
-                        "Meeting audio is transcribed on-device. Transcripts are sent to the LLM endpoint you configure (local or cloud) to generate summaries. API keys are stored in the macOS Keychain and never leave this Mac."))
+                        "会议语音在设备端实时转写，转录文本会发送至您配置的大语言模型（LLM）接口以生成摘要。API Key 以本机硬件绑定的密钥加密后存储在本机，不会明文落盘，也不会离开本机。",
+                        "Meeting audio is transcribed on-device. Transcripts are sent to the LLM endpoint you configure (local or cloud) to generate summaries. API keys are encrypted with a machine-bound key and stored locally — never in plain text, never leaving this Mac."))
 
                     section("internaldrive", tr("本地存储", "Local Storage"), tr(
                         "转录文本、摘要、截图（JPEG）保存在本机 ~/Library/Application Support/CalledMe/ 目录，不上传至任何服务器。",

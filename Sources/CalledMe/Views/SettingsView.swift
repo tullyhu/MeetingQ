@@ -377,8 +377,8 @@ private struct ProfileEditForm: View {
             } header: {
                 Text(tr("接口配置", "Connection"))
             } footer: {
-                Text(tr("示例：https://api.openai.com/v1 — API Key 保存于 macOS 钥匙串，不会明文落盘",
-                        "e.g. https://api.openai.com/v1 — API Key is stored in the macOS Keychain, never written to disk in plain text"))
+                Text(tr("示例：https://api.openai.com/v1 — API Key 以本机硬件密钥加密存储，不会明文落盘",
+                        "e.g. https://api.openai.com/v1 — API keys are encrypted with a machine-bound key, never written to disk in plain text"))
             }
 
             Section {

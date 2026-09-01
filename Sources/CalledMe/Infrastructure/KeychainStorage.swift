@@ -21,9 +21,10 @@ public enum KeychainStorage {
     private static let service = "CalledMe"
     private static let defaults = UserDefaults.standard
 
-    // Only real secrets stay in the keychain: its ACL trusts the app binary,
-    // so every update triggers one macOS authorization prompt per stored item.
-    // Plain configuration lives in UserDefaults, which is signature-independent.
+    // Secrets (LLM API keys) are AES-GCM encrypted with a machine-bound key
+    // (derived from the hardware UUID) and stored in UserDefaults — no keychain
+    // access, so macOS never shows an authorization prompt after app updates.
+    // Any legacy keychain item is migrated on first read and then deleted.
     private static func isSecret(_ key: String) -> Bool {
         key == StoreKeys.llmProfiles
     }
@@ -36,18 +37,22 @@ public enum KeychainStorage {
             keychainDelete(key)
             return
         }
-        keychainSave(key, value: value)
+        defaults.set(MachineSecretCipher.encrypt(value), forKey: defaultsKey(key))
+        keychainDelete(key)
     }
 
     public static func load(_ key: String) -> String? {
-        guard isSecret(key) else {
-            if let value = defaults.string(forKey: defaultsKey(key)) { return value }
-            guard let legacy = keychainLoad(key, allowUI: false) ?? keychainLoad(key, allowUI: true) else { return nil }
-            defaults.set(legacy, forKey: defaultsKey(key))
-            keychainDelete(key)
-            return legacy
+        if let stored = defaults.string(forKey: defaultsKey(key)) {
+            guard isSecret(key) else { return stored }
+            guard let decrypted = MachineSecretCipher.decrypt(stored) else {
+                defaults.removeObject(forKey: defaultsKey(key))
+                return nil
+            }
+            return decrypted
         }
-        return keychainLoad(key, allowUI: true)
+        guard let legacy = keychainLoad(key, allowUI: false) ?? keychainLoad(key, allowUI: true) else { return nil }
+        save(key, value: legacy)
+        return legacy
     }
 
     public static func delete(_ key: String) {
@@ -78,25 +83,6 @@ public enum KeychainStorage {
         ]
         let status = SecItemDelete(query as CFDictionary)
         if status != errSecSuccess, status != errSecItemNotFound {
-        }
-    }
-
-    private static func keychainSave(_ key: String, value: String) {
-        let data = Data(value.utf8)
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key,
-        ]
-        let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        if status == errSecItemNotFound {
-            var add = query
-            add[kSecValueData as String] = data
-            add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-            let addStatus = SecItemAdd(add as CFDictionary, nil)
-            if addStatus != errSecSuccess {
-            }
-        } else if status != errSecSuccess {
         }
     }
 

@@ -79,7 +79,7 @@ CalledMe 就是为这一刻而生的：
 - **不录制会议音视频**：音频仅在内存中实时流转用于识别，转写完成后即丢弃；本软件不会生成或保存任何会议录音、录像文件，本地只保留文字转写与截图
 - 语音识别 100% 设备端；搭配本地 LLM 可实现**全链路离线**
 - 所有数据（转写/截图/纪要）仅存本地 SQLite（WAL 模式）
-- API Key 存于 macOS 系统钥匙串（`WhenUnlockedThisDeviceOnly`）
+- API Key 以本机硬件绑定的密钥（AES-GCM）加密后存于 UserDefaults，不明文落盘、不进钥匙串——应用更新不会触发钥匙串授权框
 - 正式签名构建以应用沙盒（App Sandbox）运行，仅申请必要权限（本地自签名构建为免钥匙串重复授权提示会关闭沙盒）
 - 首次启动展示隐私声明与录音合规提示
 - **零日志**：应用不写任何日志文件（源码中已移除整个日志系统），无遥测、无统计、无广告、无崩溃上报
@@ -109,7 +109,7 @@ cd CalledMe
 ./scripts/bundle.sh
 
 # 生成 DMG
-VERSION=1.2.0 ./scripts/package-dmg.sh
+VERSION=1.2.1 ./scripts/package-dmg.sh
 ```
 
 **要求**：运行需 macOS 15+ · Apple Silicon；编译需 Xcode 26+ 或 Command Line Tools（macOS 26 SDK，无需任何第三方依赖，纯 `swiftc` 编译）
@@ -154,8 +154,8 @@ VERSION=1.2.0 ./scripts/package-dmg.sh
 | 内容 | 位置 |
 |------|------|
 | 数据库 / 截图 | `~/Library/Application Support/CalledMe/` |
-| API Key | macOS 钥匙串（service: CalledMe） |
-| 应用配置 | UserDefaults（普通配置不进钥匙串，避免应用更新后反复弹授权框） |
+| API Key | UserDefaults（AES-GCM 机器绑定密钥加密，旧钥匙串数据自动迁移） |
+| 应用配置 | UserDefaults |
 
 ## 技术栈
 
