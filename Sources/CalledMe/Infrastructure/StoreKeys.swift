@@ -27,6 +27,8 @@ public enum StoreKeys {
     public static let micDeviceName = "mic_device_name"
     public static let privacyAccepted = "privacy_accepted"
     public static let multimodalEnabled = "multimodal_enabled"
+    public static let localOcrFallbackEnabled = "local_ocr_fallback_enabled"
+    public static let screenshotAnalysisEngine = "screenshot_analysis_engine"
     public static let appLanguage = "app_language"
     public static let onboardingDone = "onboarding_done"
     public static let showDockIcon = "show_dock_icon"
@@ -34,6 +36,6 @@ public enum StoreKeys {
     public static let all = [
         userName, userNicknames, userAsrVariants, userRole, llmProfiles,
         captureWindowTitle, micEnabled, micDeviceName, privacyAccepted,
-        multimodalEnabled, appLanguage, onboardingDone, showDockIcon,
+        multimodalEnabled, localOcrFallbackEnabled, screenshotAnalysisEngine, appLanguage, onboardingDone, showDockIcon,
     ]
 }

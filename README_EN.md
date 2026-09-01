@@ -72,6 +72,7 @@ On a hit: popup alert (can be pinned) → instant screenshot → shows the origi
 ### 📸 Automatic Screenshots & Vision Analysis
 - Auto-screenshot every 30 seconds (64×36 thumbnail MD5 dedup — unchanged frames aren't stored)
 - Multimodal LLM interprets screenshots: charts / documents / code, and even the **currently-speaking person's name** in the meeting UI
+- **On-device OCR in two modes**: choose "Multimodal LLM" or "On-device OCR (offline)" as the screenshot analysis engine in Settings; in LLM mode, failed analyses are retried and then fall back to macOS on-device OCR so on-screen text is never lost
 - Screenshot timeline: browse the entire meeting visually
 
 ### 🔒 Privacy & Security
@@ -108,7 +109,7 @@ cd CalledMe
 ./scripts/bundle.sh
 
 # Generate a DMG
-VERSION=1.1.2 ./scripts/package-dmg.sh
+VERSION=1.2.0 ./scripts/package-dmg.sh
 ```
 
 **Requirements**: runs on macOS 15+ · Apple Silicon; building requires Xcode 26+ or Command Line Tools (macOS 26 SDK; zero third-party dependencies, pure `swiftc` build)
@@ -165,7 +166,7 @@ VERSION=1.1.2 ./scripts/package-dmg.sh
 | Audio capture | ScreenCaptureKit system audio + AVAudioEngine microphone (dual-track independent transcription) |
 | Screenshots | ScreenCaptureKit, 64×36 thumbnail MD5 dedup |
 | LLM | Any OpenAI-compatible API (local oMLX or cloud) |
-| Vision analysis | Multimodal LLM (OCR / chart understanding / speaker detection) |
+| Vision analysis | Multimodal LLM (OCR / chart understanding / speaker detection), auto-retry then fallback to Vision framework on-device OCR; pure on-device OCR mode also available |
 | Name detection | Regex + pinyin fuzzy matching (built-in ~600-character table, self-learning variants) + LLM semantics |
 | Storage | SQLite3 (WAL) + macOS Keychain |
 | Build | Pure `swiftc`, zero third-party dependencies |

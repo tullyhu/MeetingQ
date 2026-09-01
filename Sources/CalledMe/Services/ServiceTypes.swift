@@ -119,3 +119,7 @@ public protocol VisionService: AnyObject {
     func analyzeScreenshot(imagePath: String, currentTopic: String?, surroundingTranscripts: [String]) async throws -> VisionAnalysisResult
     func testConnection() async throws -> Bool
 }
+
+public protocol LocalOcrService: AnyObject, Sendable {
+    func recognizeText(imagePath: String) async throws -> String
+}

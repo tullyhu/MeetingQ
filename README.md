@@ -72,6 +72,7 @@ CalledMe 就是为这一刻而生的：
 ### 📸 自动截图与视觉分析
 - 每 30 秒自动截图（64×36 缩略图 MD5 去重，画面不变不存）
 - 多模态大模型可解读截图内容：识别图表/文档/代码，甚至识别视频会议 UI 中**正在发言的人名**
+- **本地 OCR 双模式**：可在设置中任选「多模态大模型」或「本地 OCR（离线）」作为截图分析方式；选大模型时分析失败会自动重试并降级到 macOS 本地 OCR 兜底，截图文字不丢失
 - 截图时光轴：按时间浏览会议全程画面
 
 ### 🔒 隐私与安全
@@ -108,7 +109,7 @@ cd CalledMe
 ./scripts/bundle.sh
 
 # 生成 DMG
-VERSION=1.1.2 ./scripts/package-dmg.sh
+VERSION=1.2.0 ./scripts/package-dmg.sh
 ```
 
 **要求**：运行需 macOS 15+ · Apple Silicon；编译需 Xcode 26+ 或 Command Line Tools（macOS 26 SDK，无需任何第三方依赖，纯 `swiftc` 编译）
@@ -165,7 +166,7 @@ VERSION=1.1.2 ./scripts/package-dmg.sh
 | 音频采集 | ScreenCaptureKit 系统音频 + AVAudioEngine 麦克风（双轨独立转写） |
 | 截图 | ScreenCaptureKit，64×36 缩略图 MD5 去重 |
 | LLM | 任意 OpenAI 兼容 API（本地 oMLX / 云端均可） |
-| 视觉分析 | 多模态 LLM（OCR / 图表理解 / 发言人识别） |
+| 视觉分析 | 多模态 LLM（OCR / 图表理解 / 发言人识别），失败自动重试并降级 Vision framework 本地 OCR；也可设置为纯本地 OCR 模式 |
 | 姓名检测 | 正则 + 拼音模糊匹配（内置 ~600 字表，自动学习变体）+ LLM 语义 |
 | 存储 | SQLite3 (WAL) + macOS Keychain |
 | 构建 | 纯 `swiftc`，零第三方依赖 |

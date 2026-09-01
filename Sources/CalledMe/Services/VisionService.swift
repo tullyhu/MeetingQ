@@ -18,19 +18,31 @@ import Foundation
 
 public final class VisionServiceImpl: VisionService {
     private let llm: LlmService
+    private let localOcr: (any LocalOcrService)?
+    private let isOcrFallbackEnabled: @Sendable () -> Bool
+    private let analysisEngine: @Sendable () -> String
     private let gate = Gate()
 
     private static let maxRetries = 2
     private static let maxConsecutiveFails = 3
     private var consecutiveFails = 0
 
-    public init(llm: LlmService) {
+    public init(llm: LlmService,
+                localOcr: (any LocalOcrService)? = nil,
+                isOcrFallbackEnabled: (@Sendable () -> Bool)? = nil,
+                analysisEngine: (@Sendable () -> String)? = nil) {
         self.llm = llm
+        self.localOcr = localOcr
+        self.isOcrFallbackEnabled = isOcrFallbackEnabled ?? { true }
+        self.analysisEngine = analysisEngine ?? { "llm" }
     }
 
     public func analyzeScreenshot(imagePath: String, currentTopic: String?, surroundingTranscripts: [String]) async throws -> VisionAnalysisResult {
+        if analysisEngine() == "local_ocr" {
+            return await localOcrResult(imagePath: imagePath)
+        }
         if consecutiveFails >= Self.maxConsecutiveFails {
-            return Self.fallbackResult(tr("分析暂不可用（连续失败）", "Analysis temporarily unavailable (repeated failures)"))
+            return await degradedResult(tr("分析暂不可用（连续失败）", "Analysis temporarily unavailable (repeated failures)"), imagePath: imagePath)
         }
 
         await gate.wait()
@@ -59,15 +71,22 @@ public final class VisionServiceImpl: VisionService {
         let systemPrompt = tr("你是会议视觉内容分析助手。请分析这张会议截图并生成结构化描述。",
                               "You are a meeting visual-content analysis assistant. Analyze this meeting screenshot and produce a structured description.")
 
-        let response: String
-        do {
-            response = try await llm.analyzeImage(systemPrompt: systemPrompt, userMessage: userMessage, imageBase64: base64, modelOverride: nil)
-        } catch is CancellationError {
+        var response: String?
+        var lastErrorHint = tr("分析失败", "Analysis failed")
+        for _ in 0...Self.maxRetries {
+            do {
+                response = try await llm.analyzeImage(systemPrompt: systemPrompt, userMessage: userMessage, imageBase64: base64, modelOverride: nil)
+                break
+            } catch is CancellationError {
+                lastErrorHint = tr("分析超时", "Analysis timed out")
+            } catch {
+                lastErrorHint = tr("分析失败: \(error.localizedDescription)", "Analysis failed: \(error.localizedDescription)")
+            }
+        }
+
+        guard let response else {
             consecutiveFails += 1
-            return Self.fallbackResult(tr("分析超时", "Analysis timed out"))
-        } catch {
-            consecutiveFails += 1
-            return Self.fallbackResult(tr("分析失败: \(error.localizedDescription)", "Analysis failed: \(error.localizedDescription)"))
+            return await degradedResult(lastErrorHint, imagePath: imagePath)
         }
 
         do {
@@ -75,13 +94,13 @@ public final class VisionServiceImpl: VisionService {
             consecutiveFails = 0
 
             if result.aiSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return Self.fallbackResult(tr("模型未返回有效分析内容", "Model returned no valid analysis"))
+                return await degradedResult(tr("模型未返回有效分析内容", "Model returned no valid analysis"), imagePath: imagePath)
             }
 
             return result
         } catch {
             consecutiveFails += 1
-            return Self.fallbackResult(tr("响应解析失败", "Failed to parse response"))
+            return await degradedResult(tr("响应解析失败", "Failed to parse response"), imagePath: imagePath)
         }
     }
 
@@ -164,6 +183,33 @@ public final class VisionServiceImpl: VisionService {
             }
         }
         return nil
+    }
+
+    private func localOcrResult(imagePath: String) async -> VisionAnalysisResult {
+        guard let localOcr,
+              let text = try? await localOcr.recognizeText(imagePath: imagePath),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return Self.fallbackResult(tr("本地OCR未识别到文字", "On-device OCR recognized no text"))
+        }
+        var result = VisionAnalysisResult()
+        result.aiSummary = tr("本地OCR提取的图中文字", "Text extracted via on-device OCR")
+        result.contentType = "other"
+        result.meetingRelevance = "medium"
+        result.ocrText = text
+        return result
+    }
+
+    private func degradedResult(_ errorHint: String, imagePath: String) async -> VisionAnalysisResult {
+        guard isOcrFallbackEnabled(), let localOcr else {
+            return Self.fallbackResult(errorHint)
+        }
+        guard let text = try? await localOcr.recognizeText(imagePath: imagePath),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return Self.fallbackResult(errorHint)
+        }
+        var result = Self.fallbackResult(errorHint + tr("（已使用本地OCR兜底）", " (fell back to local OCR)"))
+        result.ocrText = text
+        return result
     }
 
     private static func fallbackResult(_ errorHint: String) -> VisionAnalysisResult {

@@ -34,7 +34,11 @@ public final class AppServices {
         self.audio = AudioCaptureServiceImpl()
         self.screen = ScreenCaptureServiceImpl()
         self.nameDetection = NameDetectionServiceImpl(llm: llm)
-        self.vision = VisionServiceImpl(llm: llm)
+        self.vision = VisionServiceImpl(llm: llm, localOcr: AppleVisionOcrService(), isOcrFallbackEnabled: {
+            KeychainStorage.loadBool(StoreKeys.localOcrFallbackEnabled, default: true)
+        }, analysisEngine: {
+            KeychainStorage.load(StoreKeys.screenshotAnalysisEngine) ?? "llm"
+        })
         self.audio.setAsr(self.asr)
     }
 }

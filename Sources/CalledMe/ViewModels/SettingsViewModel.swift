@@ -89,6 +89,9 @@ public final class SettingsViewModel {
         }
     }
 
+    public var localOcrFallbackEnabled: Bool = true
+    public var screenshotAnalysisEngine: String = "llm"
+
     public var llmProfiles: [LlmProfileItem] = []
     public var selectedProfile: LlmProfileItem?
     public var availableModels: [String] = []
@@ -128,7 +131,7 @@ public final class SettingsViewModel {
         var parts = [
             userName, userNicknames, userAsrVariants, userRole,
             micEnabled ? "1" : "0", micDeviceName,
-            showDockIcon ? "1" : "0", dataDirectory,
+            showDockIcon ? "1" : "0", localOcrFallbackEnabled ? "1" : "0", screenshotAnalysisEngine, dataDirectory,
         ]
         if let data = try? JSONEncoder().encode(llmProfiles.map { $0.toModel() }),
            let json = String(data: data, encoding: .utf8) {
@@ -151,6 +154,8 @@ public final class SettingsViewModel {
         micDeviceName = KeychainStorage.load(StoreKeys.micDeviceName) ?? ""
 
         showDockIcon = KeychainStorage.loadBool(StoreKeys.showDockIcon, default: true)
+        localOcrFallbackEnabled = KeychainStorage.loadBool(StoreKeys.localOcrFallbackEnabled, default: true)
+        screenshotAnalysisEngine = KeychainStorage.load(StoreKeys.screenshotAnalysisEngine) ?? "llm"
 
         dataDirectory = StorageConfig.storageDir
         savedDataDirectory = dataDirectory
@@ -285,6 +290,8 @@ public final class SettingsViewModel {
         KeychainStorage.saveBool(StoreKeys.micEnabled, micEnabled)
         KeychainStorage.save(StoreKeys.micDeviceName, value: micDeviceName)
         KeychainStorage.saveBool(StoreKeys.showDockIcon, showDockIcon)
+        KeychainStorage.saveBool(StoreKeys.localOcrFallbackEnabled, localOcrFallbackEnabled)
+        KeychainStorage.save(StoreKeys.screenshotAnalysisEngine, value: screenshotAnalysisEngine)
 
         let currentDir = StorageConfig.storageDir
         if !dataDirectory.trimmingCharacters(in: .whitespaces).isEmpty, dataDirectory != currentDir {

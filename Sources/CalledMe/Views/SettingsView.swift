@@ -86,6 +86,25 @@ public struct SettingsView: View {
                 Text(tr("开启后应用图标会显示在 Dock 中；关闭后仅保留菜单栏图标。",
                         "When enabled, the app icon appears in the Dock; when disabled, only the menu bar icon remains."))
             }
+
+            Section {
+                Picker(tr("截图分析方式", "Screenshot Analysis"), selection: $vm.screenshotAnalysisEngine) {
+                    Text(tr("多模态大模型", "Multimodal LLM")).tag("llm")
+                    Text(tr("本地 OCR（离线）", "On-device OCR (offline)")).tag("local_ocr")
+                }
+                Toggle(tr("多模态失败时本地 OCR 兜底", "Local OCR fallback when multimodal fails"), isOn: $vm.localOcrFallbackEnabled)
+                    .disabled(vm.screenshotAnalysisEngine == "local_ocr")
+            } header: {
+                Text(tr("多模态", "Multimodal"))
+            } footer: {
+                if vm.screenshotAnalysisEngine == "local_ocr" {
+                    Text(tr("纯本地 OCR 模式不使用大模型、完全离线，但没有内容摘要、图表理解和发言人识别能力。",
+                            "On-device OCR mode never calls the LLM and works fully offline, but provides no content summary, chart understanding, or speaker detection."))
+                } else {
+                    Text(tr("多模态大模型分析截图失败时，使用 macOS 本地 OCR 提取图中文字，识别全程离线。",
+                            "When multimodal LLM analysis fails, use macOS on-device OCR to extract text from screenshots. Fully offline."))
+                }
+            }
         }
         .formStyle(.grouped)
     }
