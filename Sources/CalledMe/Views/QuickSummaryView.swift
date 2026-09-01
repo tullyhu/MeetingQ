@@ -150,8 +150,7 @@ public struct QuickSummaryView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
+            .mmSectionHeader()
             .padding(.bottom, 6)
     }
 

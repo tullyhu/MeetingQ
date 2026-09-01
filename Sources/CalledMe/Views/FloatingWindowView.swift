@@ -166,9 +166,7 @@ public struct FloatingWindowView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(10)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .mmCard(padding: 10)
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
     }
@@ -249,8 +247,7 @@ public struct FloatingWindowView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Label(tr("AI 摘要", "AI Summary"), systemImage: "sparkles")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .mmSectionHeader()
                 Spacer()
                 if vm.isInlineSummaryLoading {
                     ProgressView()
@@ -268,8 +265,7 @@ public struct FloatingWindowView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxHeight: 110)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .mmCard(padding: 0)
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
     }

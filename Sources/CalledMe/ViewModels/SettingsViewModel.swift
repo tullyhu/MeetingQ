@@ -314,7 +314,7 @@ public final class SettingsViewModel {
             statusMessage = tr("设置已保存。数据目录已更改，重启应用后完全生效",
                                "Settings saved. Data directory changed; fully effective after restart")
         } else {
-            statusMessage = tr("设置已保存 ✓", "Settings saved ✓")
+            statusMessage = tr("设置已保存", "Settings saved")
         }
     }
 
@@ -413,7 +413,7 @@ public final class SettingsViewModel {
                 let reply = try await withTimeout(15) { try await llm.test() }
                 connectionTestResult = reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     ? tr("LLM 无响应，请检查接口地址和 API Key", "LLM not responding. Check the base URL and API Key")
-                    : tr("LLM 连接成功 ✓", "LLM connection successful ✓")
+                    : tr("LLM 连接成功", "LLM connection successful")
             } catch is TimeoutError {
                 connectionTestResult = tr("LLM 失败：连接超时（15s）", "LLM failed: connection timed out (15s)")
             } catch {
@@ -431,7 +431,7 @@ public final class SettingsViewModel {
                     try await asr.connect()
                     await asr.disconnect()
                 }
-                asrTestResult = tr("本地 ASR 初始化成功 ✓", "Local ASR initialized successfully ✓")
+                asrTestResult = tr("本地 ASR 初始化成功", "Local ASR initialized successfully")
             } catch is TimeoutError {
                 asrTestResult = tr("ASR 超时：初始化超过 30s", "ASR timed out: initialization took over 30s")
             } catch {

@@ -245,8 +245,8 @@ public final class FloatingWindowViewModel {
             statusText = tr("请选择当前运行的会议窗口", "Select the running meeting window")
             refreshWindows()
             if availableWindows.isEmpty {
-                diagnosticHint = tr("未检测到可捕获的窗口。请确认会议窗口已打开且未最小化，然后点击 ↺ 刷新列表后选择。",
-                                    "No capturable windows detected. Make sure the meeting window is open and not minimized, then click ↺ to refresh the list and select it.")
+                diagnosticHint = tr("未检测到可捕获的窗口。请确认会议窗口已打开且未最小化，然后刷新列表后选择。",
+                                    "No capturable windows detected. Make sure the meeting window is open and not minimized, then refresh the list and select it.")
                 isDiagnosticVisible = true
             }
             pendingStartAfterWindowSelect = true
@@ -305,7 +305,7 @@ public final class FloatingWindowViewModel {
         audioCheckTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(10))
             guard !Task.isCancelled, let self, !self.audioSignalReceived else { return }
-            self.stepAudio?.setWarning(tr("静音 ⚠", "Silent ⚠"))
+            self.stepAudio?.setWarning(tr("静音", "Silent"))
             self.diagnosticHint = tr("未检测到声音，请检查：\n① 系统音量未静音  ② 默认播放设备正确  ③ 正在播放音频",
                                      "No audio detected. Check:\n① System volume is not muted  ② Default output device is correct  ③ Audio is playing")
         }
@@ -313,7 +313,7 @@ public final class FloatingWindowViewModel {
         transcriptCheckTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(30))
             guard !Task.isCancelled, let self, !self.transcriptReceived else { return }
-            self.stepTranscript?.setWarning(tr("30s 内无转录 ⚠", "No transcript in 30s ⚠"))
+            self.stepTranscript?.setWarning(tr("30s 内无转录", "No transcript in 30s"))
             if self.diagnosticHint.isEmpty {
                 self.diagnosticHint = tr("已收到音频但无文字，请检查：\n① 音频是否为清晰的语音  ② 语音识别权限是否已授权",
                                          "Audio received but no text. Check:\n① The audio is clear speech  ② Speech recognition permission is granted")
@@ -470,7 +470,7 @@ public final class FloatingWindowViewModel {
                 stepDevice?.setOk(audio.currentDeviceName ?? tr("默认音频设备", "Default Audio Device"))
             } catch {
                 stepDevice?.setError(error.localizedDescription)
-                selfTestResult = tr("✕ 音频设备错误：\(error.localizedDescription)", "✕ Audio device error: \(error.localizedDescription)")
+                selfTestResult = tr("音频设备错误：\(error.localizedDescription)", "Audio device error: \(error.localizedDescription)")
                 diagnosticHint = tr("未找到音频设备，请检查系统声音设置", "No audio device found. Check system sound settings")
                 abortAsr = true
             }
@@ -483,7 +483,7 @@ public final class FloatingWindowViewModel {
                     stepAsr?.setOk(tr("已连接", "Connected"))
                 } catch {
                     stepAsr?.setError(error.localizedDescription)
-                    selfTestResult = tr("✕ ASR 连接失败：\(error.localizedDescription)", "✕ ASR connection failed: \(error.localizedDescription)")
+                    selfTestResult = tr("ASR 连接失败：\(error.localizedDescription)", "ASR connection failed: \(error.localizedDescription)")
                     diagnosticHint = tr("请检查：① 语音识别权限是否已授权 ② 网络是否可用",
                                         "Check: ① Speech recognition permission is granted ② Network is available")
                     abortAsr = true
@@ -513,19 +513,19 @@ public final class FloatingWindowViewModel {
                 if !text.isEmpty {
                     stepTranscript?.setOk(tr("转录正常", "Transcription OK"))
                     selfTestPassed = true
-                    selfTestResult = tr("✓ ASR 自检通过 — 转录：\(text)", "✓ ASR self test passed — transcript: \(text)")
+                    selfTestResult = tr("ASR 自检通过 — 转录：\(text)", "ASR self test passed — transcript: \(text)")
                     diagnosticHint = ""
                 } else {
                     let audioOk = stepAudio?.state == .ok
                     if !audioOk {
                         stepAudio?.setError(tr("未捕获到声音", "No audio captured"))
                         stepTranscript?.setWarning(tr("未到达 ASR", "Did not reach ASR"))
-                        selfTestResult = tr("✕ 系统音频未能捕获播放声音", "✕ System audio failed to capture the played sound")
+                        selfTestResult = tr("系统音频未能捕获播放声音", "System audio failed to capture the played sound")
                         diagnosticHint = tr("软件已播放测试语音，但系统音频采集无信号。\n请检查：\n① 系统音量未静音\n② 默认播放设备设置正确\n③ 屏幕录制权限已授予（系统音频采集依赖该权限）",
                                             "The app played the test speech, but system audio capture got no signal.\nCheck:\n① System volume is not muted\n② Default output device is correct\n③ Screen recording permission is granted (system audio capture depends on it)")
                     } else {
                         stepTranscript?.setError(tr("无 ASR 响应", "No ASR response"))
-                        selfTestResult = tr("✕ 音频已捕获，但 ASR 无返回", "✕ Audio captured, but ASR returned nothing")
+                        selfTestResult = tr("音频已捕获，但 ASR 无返回", "Audio captured, but ASR returned nothing")
                         diagnosticHint = tr("请检查：\n① 语音识别权限是否已授权\n② 语音模型是否已下载\n③ 网络是否可用",
                                             "Check:\n① Speech recognition permission is granted\n② Speech model is downloaded\n③ Network is available")
                     }
@@ -579,7 +579,7 @@ public final class FloatingWindowViewModel {
                     if ok {
                         stepVisionModel?.setOk(tr("Vision 模型可用", "Vision model available"))
                     } else {
-                        stepVisionModel?.setWarning(tr("Vision 模型无响应 ⚠", "Vision model not responding ⚠"))
+                        stepVisionModel?.setWarning(tr("Vision 模型无响应", "Vision model not responding"))
                     }
                 } catch {
                     stepVisionModel?.setError(error.localizedDescription)
@@ -596,7 +596,7 @@ public final class FloatingWindowViewModel {
                         } else {
                             let reason = summary.isEmpty
                                 ? tr("空响应", "Empty response") : summary.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-                            stepVisionAnalysis?.setWarning(tr("分析未返回有效内容 (\(reason)) ⚠", "Analysis returned no valid content (\(reason)) ⚠"))
+                            stepVisionAnalysis?.setWarning(tr("分析未返回有效内容 (\(reason))", "Analysis returned no valid content (\(reason))"))
                             diagnosticHint = tr("Vision 分析失败：请确认设置的模型支持多模态（如 gpt-4o、qwen-vl、claude-sonnet等），且已在设置页配置正确的 Vision 模型 ID。",
                                                 "Vision analysis failed: make sure the configured model supports multimodal input (e.g. gpt-4o, qwen-vl, claude-sonnet) and the correct Vision model ID is set in Settings.")
                         }
@@ -613,7 +613,7 @@ public final class FloatingWindowViewModel {
                 stepVisionAnalysis?.detail = tr("启用多模态后可测试", "Enable multimodal to test")
             }
         } catch {
-            selfTestResult = tr("✕ 自检意外错误：\(error.localizedDescription)", "✕ Unexpected self test error: \(error.localizedDescription)")
+            selfTestResult = tr("自检意外错误：\(error.localizedDescription)", "Unexpected self test error: \(error.localizedDescription)")
             diagnosticHint = tr("请查看应用日志获取详情", "See the app logs for details")
         }
 

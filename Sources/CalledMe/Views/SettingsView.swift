@@ -344,16 +344,12 @@ public struct SettingsView: View {
     private func statCard(title: String, value: String, symbol: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Label(title, systemImage: symbol)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .mmSectionHeader()
             Text(value)
                 .font(.title2.weight(.bold))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .mmCard(padding: 10)
     }
 }
 
