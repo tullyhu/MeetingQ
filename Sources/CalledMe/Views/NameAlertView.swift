@@ -59,10 +59,10 @@ public struct NameAlertView: View {
             .padding(.vertical, 10)
         }
         .frame(width: 520)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.5), lineWidth: 1.5))
-        .shadow(color: .black.opacity(0.18), radius: 22, y: 5)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: MMRadius.panel, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: MMRadius.panel, style: .continuous).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+        .shadow(color: .black.opacity(0.22), radius: 24, y: 6)
         .onAppear { loadScreenshot() }
     }
 
@@ -85,15 +85,7 @@ public struct NameAlertView: View {
             }
             .buttonStyle(.borderless)
             .help(data.isPinned ? tr("已固定 — 点击取消固定", "Pinned — click to unpin") : tr("固定此提示（防止被新提醒覆盖）", "Pin this alert (prevents it from being replaced by new alerts)"))
-            Button(action: callbacks.onClose) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.borderless)
-            .help(tr("关闭", "Close"))
+            MMCloseButton(action: callbacks.onClose)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

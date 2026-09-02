@@ -29,8 +29,6 @@ public struct QuickSummaryView: View {
     public var onRefresh: () -> Void
     public var onClose: () -> Void
 
-    @State private var pulse = false
-
     public init(state: QuickSummaryState, onRefresh: @escaping () -> Void, onClose: @escaping () -> Void) {
         self.state = state
         self.onRefresh = onRefresh
@@ -70,33 +68,26 @@ public struct QuickSummaryView: View {
     }
 
     private var skeleton: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
-                Text(tr("加载中…", "Loading…"))
+                Text(tr("AI 正在生成摘要…", "Generating summary…"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 20)
-            skeletonLine(width: nil)
-            skeletonLine(width: 340)
-            skeletonLine(width: 280)
+
+            sectionHeader(tr("要点摘要", "Key Points"))
+            Text(verbatim: "placeholder line one\nplaceholder line two\nplaceholder line three")
+                .font(.callout)
+                .lineSpacing(8)
+                .redacted(reason: .placeholder)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .onAppear { pulse = true }
-    }
-
-    private func skeletonLine(width: CGFloat?) -> some View {
-        RoundedRectangle(cornerRadius: 6)
-            .fill(Color(nsColor: .separatorColor))
-            .frame(width: width, height: 12)
-            .frame(maxWidth: .infinity, alignment: width == nil ? .center : .leading)
-            .opacity(pulse ? 0.35 : 1.0)
-            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
-            .padding(.vertical, 6)
     }
 
     private var content: some View {

@@ -48,7 +48,13 @@ public final class PopupManager: PopupManaging {
             return
         }
         alertData.removeValue(forKey: id)
-        panel.close()
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.15
+            panel.animator().alphaValue = 0
+        }, completionHandler: {
+            panel.close()
+            panel.alphaValue = 1
+        })
     }
 
     public func toggleNameAlertPin(id: UUID) {
@@ -136,7 +142,16 @@ public final class PopupManager: PopupManaging {
         hosting.frame = NSRect(origin: .zero, size: size)
         panel.contentView = hosting
         stackBottomRight(panel, excluding: data.id)
+        let finalFrame = panel.frame
+        panel.setFrameOrigin(NSPoint(x: finalFrame.maxX + 24, y: finalFrame.minY))
+        panel.alphaValue = 0
         panel.orderFront(nil)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.35
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(finalFrame, display: true)
+            panel.animator().alphaValue = 1
+        }
         alerts[data.id] = panel
     }
 

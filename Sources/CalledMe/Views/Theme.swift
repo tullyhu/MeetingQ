@@ -69,3 +69,23 @@ extension ButtonStyle where Self == MMIconButtonStyle {
     public static var mmIcon: MMIconButtonStyle { MMIconButtonStyle() }
     public static func mmIcon(size: CGFloat) -> MMIconButtonStyle { MMIconButtonStyle(size: size) }
 }
+
+public struct MMCloseButton: View {
+    private let action: () -> Void
+
+    public init(action: @escaping () -> Void) {
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(.tertiary)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .help(tr("关闭", "Close"))
+    }
+}

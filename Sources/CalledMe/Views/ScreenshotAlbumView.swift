@@ -55,15 +55,7 @@ public struct ScreenshotAlbumView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
-            Button(action: onClose) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.borderless)
-            .help(tr("关闭", "Close"))
+            MMCloseButton(action: onClose)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
