@@ -25,6 +25,7 @@ public extension Notification.Name {
     static let mmRunSelfTest = Notification.Name("CalledMe.RunSelfTest")
     static let mmScreenCapturePermissionGranted = Notification.Name("CalledMe.ScreenCapturePermissionGranted")
     static let mmSessionEnded = Notification.Name("CalledMe.SessionEnded")
+    static let mmMonitoringStateChanged = Notification.Name("CalledMe.MonitoringStateChanged")
 }
 
 public enum WindowRouter {
@@ -33,4 +34,7 @@ public enum WindowRouter {
     public static func openHistory() { NotificationCenter.default.post(name: .mmOpenHistory, object: nil) }
     public static func showMainWindow() { NotificationCenter.default.post(name: .mmShowMainWindow, object: nil) }
     public static func hideMainWindow() { NotificationCenter.default.post(name: .mmHideMainWindow, object: nil) }
+    public static func postMonitoringState(_ isMonitoring: Bool) {
+        NotificationCenter.default.post(name: .mmMonitoringStateChanged, object: isMonitoring)
+    }
 }

@@ -37,7 +37,9 @@ public final class FloatingWindowViewModel {
         public let isPartial: Bool
     }
 
-    public var isMonitoring = false
+    public var isMonitoring = false {
+        didSet { WindowRouter.postMonitoringState(isMonitoring) }
+    }
     public var isSelfTestRunning = false
     public var isManualAlertRunning = false
     public var currentTopic = tr("（未开始）", "(Not Started)")

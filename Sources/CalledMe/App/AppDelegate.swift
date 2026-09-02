@@ -153,10 +153,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func showSettingsWindow() {
         if settingsWindow == nil {
             let w = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 660, height: 620),
-                styleMask: [.titled, .closable],
+                contentRect: NSRect(x: 0, y: 0, width: 720, height: 620),
+                styleMask: [.titled, .closable, .resizable],
                 backing: .buffered, defer: false)
             w.title = tr("设置", "Settings")
+            w.minSize = NSSize(width: 640, height: 560)
             w.isReleasedWhenClosed = false
             w.delegate = self
             w.contentView = NSHostingView(rootView: SettingsView(vm: settingsVM))

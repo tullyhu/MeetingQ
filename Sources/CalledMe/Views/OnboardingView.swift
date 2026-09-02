@@ -87,9 +87,10 @@ public struct OnboardingView: View {
                 ForEach(0..<OnboardingViewModel.totalSteps, id: \.self) { i in
                     Circle()
                         .fill(i <= vm.step ? Color.accentColor : Color(nsColor: .separatorColor))
-                        .frame(width: 7, height: 7)
+                        .frame(width: i == vm.step ? 9 : 7, height: i == vm.step ? 9 : 7)
                 }
             }
+            .animation(.spring(duration: 0.3), value: vm.step)
             .padding(.top, 20)
 
             Group {
@@ -100,6 +101,10 @@ public struct OnboardingView: View {
                 default: doneStep
                 }
             }
+            .id(vm.step)
+            .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
+                                    removal: .move(edge: .leading).combined(with: .opacity)))
+            .animation(.spring(duration: 0.4), value: vm.step)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             HStack {

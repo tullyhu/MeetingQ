@@ -17,7 +17,13 @@
 import SwiftUI
 
 public struct SettingsView: View {
+    private enum SettingsPane: String, CaseIterable, Identifiable {
+        case general, identity, llm, speech, stats
+        public var id: String { rawValue }
+    }
+
     @State private var vm: SettingsViewModel
+    @State private var selectedPane: SettingsPane = .general
     @State private var showClearConfigConfirm = false
     @State private var showClearTranscriptsConfirm = false
     @State private var showClearScreenshotsConfirm = false
@@ -28,22 +34,21 @@ public struct SettingsView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            TabView {
-                generalTab
-                    .tabItem { Label(tr("通用", "General"), systemImage: "gearshape") }
-                identityTab
-                    .tabItem { Label(tr("个人身份", "Identity"), systemImage: "person.crop.circle") }
-                llmTab
-                    .tabItem { Label(tr("大模型", "LLM"), systemImage: "brain") }
-                asrTab
-                    .tabItem { Label(tr("语音识别", "Speech"), systemImage: "waveform") }
-                statsTab
-                    .tabItem { Label(tr("使用统计", "Stats"), systemImage: "chart.bar") }
+            NavigationSplitView {
+                List(SettingsPane.allCases, selection: $selectedPane) { pane in
+                    Label(paneTitle(pane), systemImage: paneIcon(pane))
+                        .tag(pane)
+                }
+                .listStyle(.sidebar)
+                .navigationSplitViewColumnWidth(min: 160, ideal: 180, max: 200)
+            } detail: {
+                paneContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             Divider()
             bottomBar
         }
-        .frame(width: 640, height: 600)
+        .frame(minWidth: 640, idealWidth: 720, minHeight: 560, idealHeight: 620)
         .task { vm.loadStats() }
         .confirmationDialog(tr("确定要清空所有配置吗？", "Clear all configuration?"),
                             isPresented: $showClearConfigConfirm,
@@ -71,6 +76,39 @@ public struct SettingsView: View {
         } message: {
             Text(tr("这将删除数据库记录并删除磁盘上的截图文件，此操作不可撤销。",
                     "This will delete database records and screenshot files on disk. This cannot be undone."))
+        }
+    }
+
+    // MARK: - Panes
+
+    private func paneTitle(_ pane: SettingsPane) -> String {
+        switch pane {
+        case .general: return tr("通用", "General")
+        case .identity: return tr("个人身份", "Identity")
+        case .llm: return tr("大模型", "LLM")
+        case .speech: return tr("语音识别", "Speech")
+        case .stats: return tr("使用统计", "Stats")
+        }
+    }
+
+    private func paneIcon(_ pane: SettingsPane) -> String {
+        switch pane {
+        case .general: return "gearshape"
+        case .identity: return "person.crop.circle"
+        case .llm: return "brain"
+        case .speech: return "waveform"
+        case .stats: return "chart.bar"
+        }
+    }
+
+    @ViewBuilder
+    private var paneContent: some View {
+        switch selectedPane {
+        case .general: generalTab
+        case .identity: identityTab
+        case .llm: llmTab
+        case .speech: asrTab
+        case .stats: statsTab
         }
     }
 

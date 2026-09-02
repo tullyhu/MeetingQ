@@ -30,6 +30,18 @@ public final class StatusBarController: NSObject, NSMenuDelegate {
         image?.isTemplate = true
         statusItem.button?.image = image
         buildMenu()
+        NotificationCenter.default.addObserver(forName: .mmMonitoringStateChanged, object: nil, queue: .main) { [weak self] note in
+            Task { @MainActor in
+                self?.setMonitoring((note.object as? Bool) ?? false)
+            }
+        }
+    }
+
+    public func setMonitoring(_ isMonitoring: Bool) {
+        let name = isMonitoring ? "record.circle.fill" : "waveform.circle.fill"
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: "CalledMe")
+        image?.isTemplate = true
+        statusItem.button?.image = image
     }
 
     private func buildMenu() {
@@ -37,9 +49,9 @@ public final class StatusBarController: NSObject, NSMenuDelegate {
         menu.delegate = self
         menu.addItem(makeItem(tr("显示主窗口", "Show Main Window"), action: #selector(showMainWindow)))
         menu.addItem(makeItem(tr("历史会议…", "Meeting History…"), action: #selector(openHistory)))
-        menu.addItem(makeItem(tr("设置…", "Settings…"), action: #selector(openSettings)))
+        menu.addItem(makeItem(tr("设置…", "Settings…"), action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(.separator())
-        menu.addItem(makeItem(tr("退出 CalledMe", "Quit CalledMe"), action: #selector(quit)))
+        menu.addItem(makeItem(tr("退出 CalledMe", "Quit CalledMe"), action: #selector(quit), keyEquivalent: "q"))
         statusItem.menu = menu
         menuLanguage = AppLanguage.current
     }
@@ -50,8 +62,8 @@ public final class StatusBarController: NSObject, NSMenuDelegate {
         }
     }
 
-    private func makeItem(_ title: String, action: Selector) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+    private func makeItem(_ title: String, action: Selector, keyEquivalent: String = "") -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
         item.target = self
         return item
     }
