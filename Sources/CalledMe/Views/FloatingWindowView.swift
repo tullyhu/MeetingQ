@@ -189,25 +189,35 @@ public struct FloatingWindowView: View {
     private var transcriptArea: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                Text(vm.latestTranscript)
-                    .font(.callout)
-                    .lineSpacing(8)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .id("transcriptBottom")
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    ForEach(vm.committedEntries) { entry in
+                        TranscriptRow(entry: entry)
+                            .transition(.opacity)
+                    }
+                    ForEach(vm.partialEntries) { entry in
+                        TranscriptRow(entry: entry)
+                    }
+                    Color.clear
+                        .frame(height: 1)
+                        .id("transcriptBottom")
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .onChange(of: vm.latestTranscript) { _, _ in
+            .onChange(of: vm.committedEntries) { _, _ in
+                withAnimation { proxy.scrollTo("transcriptBottom", anchor: .bottom) }
+            }
+            .onChange(of: vm.partialEntries) { _, _ in
                 withAnimation { proxy.scrollTo("transcriptBottom", anchor: .bottom) }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .textBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: MMRadius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: MMRadius.card, style: .continuous).stroke(Color(nsColor: .separatorColor), lineWidth: 0.5))
         .overlay(alignment: .topTrailing) {
-            if !vm.latestTranscript.isEmpty {
+            if !vm.committedEntries.isEmpty || !vm.partialEntries.isEmpty {
                 Button { showTranscriptResetConfirm = true } label: {
                     Image(systemName: "arrow.counterclockwise")
                         .font(.system(size: 11))
@@ -316,6 +326,31 @@ public struct FloatingWindowView: View {
         }
         .buttonStyle(.mmIcon(size: 30))
         .help(tooltip)
+    }
+}
+
+private struct TranscriptRow: View {
+    let entry: FloatingWindowViewModel.TranscriptEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let speaker = entry.speaker {
+                Text(speaker)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(entry.isSelf ? Color.accentColor : Color.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(entry.isSelf ? Color.accentColor.opacity(0.12)
+                                             : Color(nsColor: .separatorColor).opacity(0.35))
+                    .clipShape(Capsule())
+            }
+            Text(entry.text)
+                .font(.callout)
+                .lineSpacing(4)
+                .foregroundStyle(entry.isPartial ? .secondary : .primary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 

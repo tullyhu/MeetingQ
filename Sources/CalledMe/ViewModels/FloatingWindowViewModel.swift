@@ -29,11 +29,20 @@ public final class FloatingWindowViewModel {
     private let vision: VisionService
     private let popups: PopupManaging
 
+    public struct TranscriptEntry: Identifiable, Equatable {
+        public let id: String
+        public let speaker: String?
+        public let isSelf: Bool
+        public let text: String
+        public let isPartial: Bool
+    }
+
     public var isMonitoring = false
     public var isSelfTestRunning = false
     public var isManualAlertRunning = false
     public var currentTopic = tr("（未开始）", "(Not Started)")
-    public var latestTranscript = ""
+    public private(set) var committedEntries: [TranscriptEntry] = []
+    public private(set) var partialEntries: [TranscriptEntry] = []
     public var elapsedTime = "00:00:00"
     public var statusText = tr("就绪", "Ready")
     public var hasSessionData = false
@@ -90,6 +99,7 @@ public final class FloatingWindowViewModel {
 
     private var startTime = Date()
     private var transcriptHistory: [String] = []
+    private var entrySeq = 0
     private var timestampedHistory: [(time: Date, text: String)] = []
     // Per-track in-progress partial results, keyed by speaker label ("" = unlabeled single track)
     private struct TrackPartial { var text = ""; var uid = -1 }
@@ -196,7 +206,8 @@ public final class FloatingWindowViewModel {
     public func resetTranscriptDisplay() {
         transcriptHistory.removeAll()
         trackPartials.removeAll()
-        latestTranscript = ""
+        committedEntries = []
+        partialEntries = []
     }
 
     // MARK: - Commands
@@ -405,11 +416,12 @@ public final class FloatingWindowViewModel {
         }
         trackPartials.removeAll()
         recentRemoteUtterances.removeAll()
+        partialEntries = []
 
         isMonitoring = false
         statusText = tr("已停止", "Stopped")
         currentTopic = tr("（已结束）", "(Ended)")
-        latestTranscript = ""
+        committedEntries = []
         inlineSummaryText = ""
         transcriptsSinceConclusionCheck = 0
         topicDetecting = false
@@ -1064,13 +1076,14 @@ public final class FloatingWindowViewModel {
             appendHistory(committed, speaker: committedLabel)
         }
 
-        var lines = Array(transcriptHistory.suffix(25))
+        var partials: [TranscriptEntry] = []
         for key in trackPartials.keys.sorted() {
             guard let p = trackPartials[key],
                   !p.text.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
-            lines.append(key.isEmpty ? p.text : "\(key)：\(p.text)")
+            partials.append(TranscriptEntry(id: "p-\(key)", speaker: key.isEmpty ? nil : key,
+                                            isSelf: key == Self.resolvedSelfLabel, text: p.text, isPartial: true))
         }
-        latestTranscript = lines.joined(separator: "\n")
+        partialEntries = partials
 
         lastTranscriptAt = Date()
         lastSpeechBoundaryAt = Date()
@@ -1168,6 +1181,11 @@ public final class FloatingWindowViewModel {
         timestampedHistory.append((Date(), line))
         if transcriptHistory.count > 200 { transcriptHistory.removeFirst() }
         if timestampedHistory.count > 60 { timestampedHistory.removeFirst() }
+        entrySeq += 1
+        let hasSpeaker = speaker?.isEmpty == false
+        committedEntries.append(TranscriptEntry(id: "c\(entrySeq)", speaker: hasSpeaker ? speaker : nil,
+                                                isSelf: speaker == Self.resolvedSelfLabel, text: text, isPartial: false))
+        if committedEntries.count > 25 { committedEntries.removeFirst() }
     }
 
     private static let echoWindowSeconds: TimeInterval = 12
