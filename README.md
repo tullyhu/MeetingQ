@@ -12,8 +12,6 @@
   <img alt="License" src="https://img.shields.io/badge/license-GPLv3-blue">
 </p>
 
-![CalledMe 浮动窗](docs/screenshots/01-floating-window.png)
-
 ---
 
 ## 为什么做 CalledMe
@@ -26,18 +24,6 @@ CalledMe 就是为这一刻而生的：
 2. **它认得你** —— 有人叫到你名字（包括同音误读），0.5 秒内弹窗提醒
 3. **它帮你补上下文** —— 弹窗里附上被叫瞬间的截图、原话、前后 8 条对话，以及 AI 提取出的"对方抛给你的问题"
 4. **它把纪要也写了** —— 散会后一键生成摘要、决策、行动项，导出 Markdown / HTML / TXT
-
-## 效果演示
-
-| 被叫姓名提醒 | AI 快速摘要 |
-|:---:|:---:|
-| ![被叫提醒](docs/screenshots/02-name-alert.png) | ![快速摘要](docs/screenshots/03-quick-summary.png) |
-| 弹窗 + 即时截图 + 上下文 + 问题提取 | 要点 / 决策 / 行动项一键生成 |
-
-| 实时转写浮动窗 | 历史会议与导出 |
-|:---:|:---:|
-| ![浮动窗](docs/screenshots/01-floating-window.png) | ![历史会议](docs/screenshots/04-history.png) |
-| 议题自动跟踪，转写实时滚动 | 完整存档，三种格式导出 |
 
 ## 功能特性
 

@@ -12,8 +12,6 @@
   <img alt="License" src="https://img.shields.io/badge/license-GPLv3-blue">
 </p>
 
-![CalledMe floating window](docs/screenshots/01-floating-window.png)
-
 ---
 
 ## Why CalledMe
@@ -26,18 +24,6 @@ CalledMe is built for exactly that moment:
 2. **It knows who you are** — when someone calls your name (even a homophone misrecognition), a popup alerts you within 0.5 seconds
 3. **It catches you up** — the popup includes an instant screenshot, the exact sentence, the previous 8 lines of conversation, and the AI-extracted "questions thrown at you"
 4. **It writes the minutes too** — after the meeting, generate summaries, decisions and action items in one click, exported as Markdown / HTML / TXT
-
-## Screenshots
-
-| Name call-out alert | AI quick summary |
-|:---:|:---:|
-| ![Name alert](docs/screenshots/02-name-alert.png) | ![Quick summary](docs/screenshots/03-quick-summary.png) |
-| Popup + instant screenshot + context + question extraction | Key points / decisions / action items in one click |
-
-| Live transcription floating window | Meeting history & export |
-|:---:|:---:|
-| ![Floating window](docs/screenshots/01-floating-window.png) | ![History](docs/screenshots/04-history.png) |
-| Automatic topic tracking, live scrolling transcript | Full archive, three export formats |
 
 ## Features
 
