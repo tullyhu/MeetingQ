@@ -85,6 +85,7 @@ CalledMe 就是为这一刻而生的：
 - **零日志**：应用不写任何日志文件（源码中已移除整个日志系统），无遥测、无统计、无广告、无崩溃上报
 
 ### 🛠️ 其他
+- 原生 macOS 界面：浮动窗内转写为逐条消息流（说话人胶囊标签 + 实时音量电平 + 呼吸状态点），设置页为系统设置风格侧栏，提醒弹窗材质卡片 + 滑入动效
 - 中英文双语界面，首次启动选择语言
 - 四步漫游引导：授权 → 填写姓名 → 配置模型 → 上手
 - 8 步功能自检：一键诊断音频采集、识别、转写全链路
@@ -109,7 +110,7 @@ cd CalledMe
 ./scripts/bundle.sh
 
 # 生成 DMG
-VERSION=1.2.1 ./scripts/package-dmg.sh
+VERSION=1.3.0 ./scripts/package-dmg.sh
 ```
 
 **要求**：运行需 macOS 15+ · Apple Silicon；编译需 Xcode 26+ 或 Command Line Tools（macOS 26 SDK，无需任何第三方依赖，纯 `swiftc` 编译）

@@ -85,6 +85,7 @@ On a hit: popup alert (can be pinned) → instant screenshot → shows the origi
 - **Zero logging**: the app writes no log files at all (the entire logging system has been removed from the source). No telemetry, no analytics, no ads, no crash reporting
 
 ### 🛠️ More
+- Native macOS UI: per-utterance transcript stream in the floating window (speaker capsules, live audio level meter, breathing status dot), System Settings-style settings sidebar, material alert cards with slide-in animations
 - Bilingual UI (中文 / English), language selection on first launch
 - 4-step onboarding: permissions → your name → model setup → ready
 - 8-step self-diagnostics: one-click diagnosis of audio capture, recognition and transcription
@@ -109,7 +110,7 @@ cd CalledMe
 ./scripts/bundle.sh
 
 # Generate a DMG
-VERSION=1.2.1 ./scripts/package-dmg.sh
+VERSION=1.3.0 ./scripts/package-dmg.sh
 ```
 
 **Requirements**: runs on macOS 15+ · Apple Silicon; building requires Xcode 26+ or Command Line Tools (macOS 26 SDK; zero third-party dependencies, pure `swiftc` build)
