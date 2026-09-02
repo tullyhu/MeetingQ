@@ -46,6 +46,7 @@ extension View {
 }
 
 public struct MMIconButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
     private let size: CGFloat
 
     public init(size: CGFloat = 26) {
@@ -60,6 +61,7 @@ public struct MMIconButtonStyle: ButtonStyle {
             .background(configuration.isPressed ? Color(nsColor: .separatorColor).opacity(0.5) : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: MMRadius.small, style: .continuous))
             .contentShape(Rectangle())
+            .opacity(isEnabled ? 1 : 0.4)
     }
 }
 

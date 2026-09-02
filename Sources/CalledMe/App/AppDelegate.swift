@@ -137,7 +137,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             positionBottomRight(w)
             mainWindow = w
         }
-        mainWindow?.makeKeyAndOrderFront(nil)
+        if let w = mainWindow, !w.isVisible {
+            w.alphaValue = 0
+            w.makeKeyAndOrderFront(nil)
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.18
+                w.animator().alphaValue = 1
+            }
+        } else {
+            mainWindow?.makeKeyAndOrderFront(nil)
+        }
         NSApp.activate(ignoringOtherApps: true)
     }
 

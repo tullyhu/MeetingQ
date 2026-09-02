@@ -49,10 +49,7 @@ public struct FloatingWindowView: View {
 
     private var titleBar: some View {
         HStack(spacing: 8) {
-            Circle()
-                .fill(vm.isSelfTestRunning ? Color.accentColor
-                      : vm.isMonitoring ? Color.green : Color(nsColor: .tertiaryLabelColor))
-                .frame(width: 8, height: 8)
+            StatusDot(isMonitoring: vm.isMonitoring, isSelfTestRunning: vm.isSelfTestRunning)
             Text("CalledMe")
                 .font(.headline)
             Spacer()
@@ -82,6 +79,10 @@ public struct FloatingWindowView: View {
             Text(vm.elapsedTime)
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
+            if vm.isMonitoring {
+                AudioLevelMeter(segments: vm.audioLevelSegments)
+                    .padding(.leading, 2)
+            }
             Spacer()
         }
         .padding(.horizontal, 14)
@@ -93,33 +94,19 @@ public struct FloatingWindowView: View {
             Text(tr("截图窗口", "Capture Window"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Menu {
+            Picker(selection: $vm.captureWindowTitle) {
+                if vm.captureWindowTitle.isEmpty {
+                    Text(tr("选择会议窗口", "Select Meeting Window")).tag("")
+                }
                 ForEach(vm.availableWindows, id: \.self) { title in
-                    Button(title) { vm.captureWindowTitle = title }
+                    Text(title).tag(title)
                 }
             } label: {
-                HStack(spacing: 4) {
-                    Text(vm.captureWindowTitle.isEmpty
-                         ? tr("选择会议窗口", "Select Meeting Window")
-                         : vm.captureWindowTitle)
-                        .font(.callout)
-                        .foregroundStyle(vm.captureWindowTitle.isEmpty ? Color.secondary : Color.primary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer(minLength: 4)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .frame(maxWidth: .infinity)
-                .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
+                EmptyView()
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(maxWidth: .infinity, alignment: .leading)
             headerButton("arrow.clockwise", tooltip: tr("刷新窗口列表", "Refresh Window List")) { vm.refreshWindows() }
         }
         .padding(.horizontal, 12)
@@ -271,50 +258,29 @@ public struct FloatingWindowView: View {
     }
 
     private var bottomBar: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 10) {
             if vm.hasSessionData {
-                Button { vm.openScreenshotAlbum() } label: {
-                    Label(tr("截图", "Shots"), systemImage: "photo.on.rectangle")
-                }
-                .buttonStyle(.borderless)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                bottomIcon("photo.on.rectangle", tooltip: tr("截图相册", "Screenshots")) { vm.openScreenshotAlbum() }
             }
-            Button { vm.toggleMultimodalMode() } label: {
-                Label(vm.multimodalButtonText, systemImage: "eye")
+            bottomIcon(vm.isMultimodalEnabled ? "eye" : "eye.slash",
+                       tooltip: vm.isMultimodalEnabled ? tr("多模态分析已开启", "Multimodal analysis on")
+                                                       : tr("多模态分析已关闭", "Multimodal analysis off")) {
+                vm.toggleMultimodalMode()
             }
-            .buttonStyle(.borderless)
-            .font(.caption)
-            .foregroundStyle(.secondary)
             if vm.hasSessionData {
-                Button { Task { await vm.showQuickSummary() } } label: {
-                    Label(tr("摘要", "Summary"), systemImage: "doc.text")
-                }
-                .buttonStyle(.borderless)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                bottomIcon("doc.text", tooltip: tr("快速摘要", "Quick Summary")) { Task { await vm.showQuickSummary() } }
             }
             if vm.isMonitoring {
-                Button {
+                bottomIcon("bell.badge",
+                           tooltip: vm.isManualAlertRunning ? tr("收集中…", "Collecting…") : tr("模拟被叫到", "Simulate Name Call")) {
                     Task { await vm.manualTriggerAlert() }
-                } label: {
-                    Label(vm.isManualAlertRunning ? tr("收集中…", "Collecting…") : tr("被叫到", "Name Called"),
-                          systemImage: "bell.badge")
                 }
-                .buttonStyle(.borderless)
-                .font(.caption)
-                .foregroundStyle(.secondary)
                 .disabled(vm.isManualAlertRunning)
             } else {
-                Button {
+                bottomIcon("checklist",
+                           tooltip: vm.isSelfTestRunning ? tr("自检中…", "Testing…") : tr("自检", "Self Test")) {
                     Task { await vm.runSelfTest() }
-                } label: {
-                    Label(vm.isSelfTestRunning ? tr("自检中…", "Testing…") : tr("自检", "Self Test"),
-                          systemImage: "checklist")
                 }
-                .buttonStyle(.borderless)
-                .font(.caption)
-                .foregroundStyle(.secondary)
                 .disabled(vm.isSelfTestRunning)
             }
             Spacer(minLength: 0)
@@ -339,12 +305,59 @@ public struct FloatingWindowView: View {
     private func headerButton(_ symbol: String, tooltip: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.mmIcon(size: 24))
         .help(tooltip)
+    }
+
+    private func bottomIcon(_ symbol: String, tooltip: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+        }
+        .buttonStyle(.mmIcon(size: 30))
+        .help(tooltip)
+    }
+}
+
+private struct StatusDot: View {
+    let isMonitoring: Bool
+    let isSelfTestRunning: Bool
+    @State private var pulsing = false
+
+    var body: some View {
+        Circle()
+            .fill(isSelfTestRunning ? Color.accentColor
+                  : isMonitoring ? Color.green : Color(nsColor: .tertiaryLabelColor))
+            .frame(width: 8, height: 8)
+            .scaleEffect(pulsing ? 1.35 : 1)
+            .opacity(pulsing ? 0.6 : 1)
+            .onAppear { updateAnimation() }
+            .onChange(of: isMonitoring) { _, _ in updateAnimation() }
+            .onChange(of: isSelfTestRunning) { _, _ in updateAnimation() }
+    }
+
+    private func updateAnimation() {
+        if isMonitoring || isSelfTestRunning {
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulsing = true }
+        } else {
+            withAnimation(.easeOut(duration: 0.2)) { pulsing = false }
+        }
+    }
+}
+
+private struct AudioLevelMeter: View {
+    let segments: Int
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(0..<8, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(index < segments ? Color.accentColor : Color(nsColor: .separatorColor))
+                    .frame(width: 3, height: 5 + CGFloat(index) * 1.2)
+            }
+        }
+        .frame(height: 14, alignment: .bottom)
+        .animation(.easeOut(duration: 0.12), value: segments)
+        .accessibilityLabel(tr("音量电平", "Audio level"))
     }
 }

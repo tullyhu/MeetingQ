@@ -54,10 +54,8 @@ public final class FloatingWindowViewModel {
     public var diagnosticSteps: [DiagnosticItem] = []
     public var isDiagnosticVisible = false
     public var diagnosticHint = ""
-    public var isMultimodalEnabled = false {
-        didSet { multimodalButtonText = isMultimodalEnabled ? tr("🖼多模态", "🖼Multimodal") : tr("🔘纯文本", "🔘Text Only") }
-    }
-    public var multimodalButtonText = tr("🔘纯文本", "🔘Text Only")
+    public var isMultimodalEnabled = false
+    public var audioLevelSegments: Int = 0
     public var topicFlashId = UUID()
 
     public var hasSelfTestResult: Bool { !selfTestResult.isEmpty }
@@ -381,6 +379,7 @@ public final class FloatingWindowViewModel {
         guard isMonitoring else { return }
 
         statusText = tr("停止中...", "Stopping...")
+        audioLevelSegments = 0
 
         elapsedTask?.cancel(); elapsedTask = nil
         audioCheckTask?.cancel(); audioCheckTask = nil
@@ -929,6 +928,9 @@ public final class FloatingWindowViewModel {
 
     private func onAudioLevel(_ rms: Float) {
         lastAudioRms = rms
+
+        let segments = isMonitoring ? min(8, max(0, Int((Double(rms) / 0.12).squareRoot() * 8 + 0.5))) : 0
+        if segments != audioLevelSegments { audioLevelSegments = segments }
 
         if rms < 0.005 {
             lastSpeechBoundaryAt = Date()
