@@ -126,6 +126,37 @@ public final class DataStore {
         exec("CREATE INDEX IF NOT EXISTS idx_topics_session ON topics(session_id)")
         exec("CREATE INDEX IF NOT EXISTS idx_transcripts_topic ON transcripts(topic_id)")
         exec("CREATE INDEX IF NOT EXISTS idx_screenshots_session ON screenshots(session_id)")
+        exec("""
+        CREATE TABLE IF NOT EXISTS themes(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            keywords TEXT,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL,
+            archived INTEGER NOT NULL DEFAULT 0)
+        """)
+        migrate("ALTER TABLE sessions ADD COLUMN theme_id INTEGER REFERENCES themes(id) ON DELETE SET NULL")
+        migrate("ALTER TABLE sessions ADD COLUMN meeting_type TEXT")
+        migrate("ALTER TABLE sessions ADD COLUMN template_id TEXT")
+        migrate("ALTER TABLE sessions ADD COLUMN quality_score INTEGER")
+        migrate("ALTER TABLE sessions ADD COLUMN quality_issues TEXT")
+        migrate("ALTER TABLE sessions ADD COLUMN minutes_json TEXT")
+        migrate("ALTER TABLE action_items ADD COLUMN status TEXT NOT NULL DEFAULT 'not_started'")
+        migrate("ALTER TABLE action_items ADD COLUMN priority TEXT")
+        migrate("ALTER TABLE action_items ADD COLUMN source_speaker TEXT")
+        migrate("ALTER TABLE decisions ADD COLUMN source_speaker TEXT")
+        migrate("ALTER TABLE screenshots ADD COLUMN key_dates TEXT")
+        migrate("ALTER TABLE screenshots ADD COLUMN slide_decisions TEXT")
+        migrate("ALTER TABLE screenshots ADD COLUMN slide_action_items TEXT")
+        migrate("ALTER TABLE screenshots ADD COLUMN chart_type TEXT")
+        migrate("ALTER TABLE screenshots ADD COLUMN chart_insight TEXT")
+        exec("CREATE INDEX IF NOT EXISTS idx_sessions_theme ON sessions(theme_id)")
+    }
+
+    private func migrate(_ sql: String) {
+        queue.sync {
+            sqlite3_exec(db, sql, nil, nil, nil)
+        }
     }
 
     private func bind(_ stmt: OpaquePointer?, _ index: Int32, _ value: String?) {
@@ -185,12 +216,18 @@ public final class DataStore {
     }
 
     public func insert(_ s: MeetingSession) {
-        s.id = run("INSERT INTO sessions(start_time,end_time,status,title,summary) VALUES(?,?,?,?,?)") { stmt in
+        s.id = run("INSERT INTO sessions(start_time,end_time,status,title,summary,theme_id,meeting_type,template_id,quality_score,quality_issues,minutes_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)") { stmt in
             bind(stmt, 1, s.startTime)
             bind(stmt, 2, s.endTime)
             bind(stmt, 3, s.statusRaw)
             bind(stmt, 4, s.title)
             bind(stmt, 5, s.summary)
+            if let themeId = s.themeId { sqlite3_bind_int64(stmt, 6, themeId) } else { sqlite3_bind_null(stmt, 6) }
+            bind(stmt, 7, s.meetingType)
+            bind(stmt, 8, s.templateId)
+            if let q = s.qualityScore { sqlite3_bind_int64(stmt, 9, Int64(q)) } else { sqlite3_bind_null(stmt, 9) }
+            bind(stmt, 10, s.qualityIssues)
+            bind(stmt, 11, s.minutesJson)
         }
     }
 
@@ -243,10 +280,11 @@ public final class DataStore {
 
     public func insert(_ d: Decision) {
         let topicId = d.topic?.id ?? d.topicId
-        d.id = run("INSERT INTO decisions(topic_id,timestamp,decision_text) VALUES(?,?,?)") { stmt in
+        d.id = run("INSERT INTO decisions(topic_id,timestamp,decision_text,source_speaker) VALUES(?,?,?,?)") { stmt in
             sqlite3_bind_int64(stmt, 1, topicId)
             bind(stmt, 2, d.timestamp)
             bind(stmt, 3, d.decisionText)
+            bind(stmt, 4, d.sourceSpeaker)
         }
         d.topicId = topicId
         if let topic = d.topic, !topic.decisions.contains(where: { $0 === d }) {
@@ -274,12 +312,15 @@ public final class DataStore {
 
     public func insert(_ a: ActionItem) {
         let topicId = a.topic?.id ?? a.topicId
-        a.id = run("INSERT INTO action_items(topic_id,timestamp,assigned_to,task,deadline) VALUES(?,?,?,?,?)") { stmt in
+        a.id = run("INSERT INTO action_items(topic_id,timestamp,assigned_to,task,deadline,status,priority,source_speaker) VALUES(?,?,?,?,?,?,?,?)") { stmt in
             sqlite3_bind_int64(stmt, 1, topicId)
             bind(stmt, 2, a.timestamp)
             bind(stmt, 3, a.assignedTo)
             bind(stmt, 4, a.task)
             bind(stmt, 5, a.deadline)
+            bind(stmt, 6, a.statusRaw)
+            bind(stmt, 7, a.priority)
+            bind(stmt, 8, a.sourceSpeaker)
         }
         a.topicId = topicId
         if let topic = a.topic, !topic.actionItems.contains(where: { $0 === a }) {
@@ -288,13 +329,39 @@ public final class DataStore {
     }
 
     public func update(_ s: MeetingSession) {
-        run("UPDATE sessions SET start_time=?,end_time=?,status=?,title=?,summary=? WHERE id=?") { stmt in
+        run("UPDATE sessions SET start_time=?,end_time=?,status=?,title=?,summary=?,theme_id=?,meeting_type=?,template_id=?,quality_score=?,quality_issues=?,minutes_json=? WHERE id=?") { stmt in
             bind(stmt, 1, s.startTime)
             bind(stmt, 2, s.endTime)
             bind(stmt, 3, s.statusRaw)
             bind(stmt, 4, s.title)
             bind(stmt, 5, s.summary)
-            sqlite3_bind_int64(stmt, 6, s.id)
+            if let themeId = s.themeId { sqlite3_bind_int64(stmt, 6, themeId) } else { sqlite3_bind_null(stmt, 6) }
+            bind(stmt, 7, s.meetingType)
+            bind(stmt, 8, s.templateId)
+            if let q = s.qualityScore { sqlite3_bind_int64(stmt, 9, Int64(q)) } else { sqlite3_bind_null(stmt, 9) }
+            bind(stmt, 10, s.qualityIssues)
+            bind(stmt, 11, s.minutesJson)
+            sqlite3_bind_int64(stmt, 12, s.id)
+        }
+    }
+
+    public func update(_ a: ActionItem) {
+        run("UPDATE action_items SET assigned_to=?,task=?,deadline=?,status=?,priority=?,source_speaker=? WHERE id=?") { stmt in
+            bind(stmt, 1, a.assignedTo)
+            bind(stmt, 2, a.task)
+            bind(stmt, 3, a.deadline)
+            bind(stmt, 4, a.statusRaw)
+            bind(stmt, 5, a.priority)
+            bind(stmt, 6, a.sourceSpeaker)
+            sqlite3_bind_int64(stmt, 7, a.id)
+        }
+    }
+
+    public func update(_ d: Decision) {
+        run("UPDATE decisions SET decision_text=?,source_speaker=? WHERE id=?") { stmt in
+            bind(stmt, 1, d.decisionText)
+            bind(stmt, 2, d.sourceSpeaker)
+            sqlite3_bind_int64(stmt, 3, d.id)
         }
     }
 
@@ -321,7 +388,7 @@ public final class DataStore {
     }
 
     public func update(_ s: Screenshot) {
-        run("UPDATE screenshots SET timestamp=?,file_path=?,image_hash=?,ai_summary=?,ocr_text=?,content_type=?,key_entities=?,key_numbers=?,meeting_relevance=?,sensitivity_level=?,analysis_status=?,active_speaker_name=? WHERE id=?") { stmt in
+        run("UPDATE screenshots SET timestamp=?,file_path=?,image_hash=?,ai_summary=?,ocr_text=?,content_type=?,key_entities=?,key_numbers=?,meeting_relevance=?,sensitivity_level=?,analysis_status=?,active_speaker_name=?,key_dates=?,slide_decisions=?,slide_action_items=?,chart_type=?,chart_insight=? WHERE id=?") { stmt in
             bind(stmt, 1, s.timestamp)
             bind(stmt, 2, s.filePath)
             bind(stmt, 3, s.imageHash)
@@ -334,7 +401,12 @@ public final class DataStore {
             bind(stmt, 10, s.sensitivityLevel)
             bind(stmt, 11, s.analysisStatus)
             bind(stmt, 12, s.activeSpeakerName)
-            sqlite3_bind_int64(stmt, 13, s.id)
+            bind(stmt, 13, s.keyDates)
+            bind(stmt, 14, s.slideDecisions)
+            bind(stmt, 15, s.slideActionItems)
+            bind(stmt, 16, s.chartType)
+            bind(stmt, 17, s.chartInsight)
+            sqlite3_bind_int64(stmt, 18, s.id)
         }
     }
 
@@ -345,6 +417,12 @@ public final class DataStore {
         s.endTime = date(stmt, 2)
         s.statusRaw = text(stmt, 3) ?? "idle"
         s.summary = text(stmt, 5)
+        if sqlite3_column_type(stmt, 6) != SQLITE_NULL { s.themeId = sqlite3_column_int64(stmt, 6) }
+        s.meetingType = text(stmt, 7)
+        s.templateId = text(stmt, 8)
+        if sqlite3_column_type(stmt, 9) != SQLITE_NULL { s.qualityScore = Int(sqlite3_column_int64(stmt, 9)) }
+        s.qualityIssues = text(stmt, 10)
+        s.minutesJson = text(stmt, 11)
         return s
     }
 
@@ -385,6 +463,11 @@ public final class DataStore {
         s.sensitivityLevel = text(stmt, 11)
         s.analysisStatus = text(stmt, 12)
         s.activeSpeakerName = text(stmt, 13)
+        s.keyDates = text(stmt, 14)
+        s.slideDecisions = text(stmt, 15)
+        s.slideActionItems = text(stmt, 16)
+        s.chartType = text(stmt, 17)
+        s.chartInsight = text(stmt, 18)
         return s
     }
 
@@ -396,8 +479,10 @@ public final class DataStore {
         }
     }
 
+    private static let sessionColumns = "id,start_time,end_time,status,title,summary,theme_id,meeting_type,template_id,quality_score,quality_issues,minutes_json"
+
     public func fetchSessions() -> [MeetingSession] {
-        query("SELECT id,start_time,end_time,status,title,summary FROM sessions ORDER BY start_time DESC", map: mapSession)
+        query("SELECT \(Self.sessionColumns) FROM sessions ORDER BY start_time DESC", map: mapSession)
     }
 
     public func fetchTopics(sessionId: Int64) -> [Topic] {
@@ -409,27 +494,31 @@ public final class DataStore {
     }
 
     public func fetchScreenshots(sessionId: Int64) -> [Screenshot] {
-        query("SELECT id,session_id,timestamp,file_path,image_hash,ai_summary,ocr_text,content_type,key_entities,key_numbers,meeting_relevance,sensitivity_level,analysis_status,active_speaker_name FROM screenshots WHERE session_id=? ORDER BY timestamp", bind: { sqlite3_bind_int64($0, 1, sessionId) }, map: mapScreenshot)
+        query("SELECT id,session_id,timestamp,file_path,image_hash,ai_summary,ocr_text,content_type,key_entities,key_numbers,meeting_relevance,sensitivity_level,analysis_status,active_speaker_name,key_dates,slide_decisions,slide_action_items,chart_type,chart_insight FROM screenshots WHERE session_id=? ORDER BY timestamp", bind: { sqlite3_bind_int64($0, 1, sessionId) }, map: mapScreenshot)
     }
 
     public func fetchDecisions(topicId: Int64) -> [Decision] {
-        query("SELECT id,topic_id,timestamp,decision_text FROM decisions WHERE topic_id=? ORDER BY timestamp", bind: { sqlite3_bind_int64($0, 1, topicId) }) { stmt in
+        query("SELECT id,topic_id,timestamp,decision_text,source_speaker FROM decisions WHERE topic_id=? ORDER BY timestamp", bind: { sqlite3_bind_int64($0, 1, topicId) }) { stmt in
             let d = Decision(timestamp: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 2)),
                              decisionText: text(stmt, 3) ?? "")
             d.id = sqlite3_column_int64(stmt, 0)
             d.topicId = sqlite3_column_int64(stmt, 1)
+            d.sourceSpeaker = text(stmt, 4)
             return d
         }
     }
 
     public func fetchActionItems(topicId: Int64) -> [ActionItem] {
-        query("SELECT id,topic_id,timestamp,assigned_to,task,deadline FROM action_items WHERE topic_id=? ORDER BY timestamp", bind: { sqlite3_bind_int64($0, 1, topicId) }) { stmt in
+        query("SELECT id,topic_id,timestamp,assigned_to,task,deadline,status,priority,source_speaker FROM action_items WHERE topic_id=? ORDER BY timestamp", bind: { sqlite3_bind_int64($0, 1, topicId) }) { stmt in
             let a = ActionItem(timestamp: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 2)),
                                assignedTo: text(stmt, 3) ?? "",
                                task: text(stmt, 4) ?? "",
                                deadline: text(stmt, 5))
             a.id = sqlite3_column_int64(stmt, 0)
             a.topicId = sqlite3_column_int64(stmt, 1)
+            a.statusRaw = text(stmt, 6) ?? ActionItemStatus.notStarted.rawValue
+            a.priority = text(stmt, 7)
+            a.sourceSpeaker = text(stmt, 8)
             return a
         }
     }
@@ -459,7 +548,7 @@ public final class DataStore {
     }
 
     public func fetchDetail(sessionId: Int64) -> MeetingSession? {
-        guard let session = query("SELECT id,start_time,end_time,status,title,summary FROM sessions WHERE id=?", bind: { sqlite3_bind_int64($0, 1, sessionId) }, map: mapSession).first else {
+        guard let session = query("SELECT \(Self.sessionColumns) FROM sessions WHERE id=?", bind: { sqlite3_bind_int64($0, 1, sessionId) }, map: mapSession).first else {
             return nil
         }
         session.topics = fetchTopics(sessionId: sessionId)
@@ -529,12 +618,86 @@ public final class DataStore {
     }
 
     public func latestMonitoringOrRecentSession() -> MeetingSession? {
-        if let monitoring = query("SELECT id,start_time,end_time,status,title,summary FROM sessions WHERE status='monitoring' ORDER BY start_time DESC LIMIT 1", map: mapSession).first {
+        if let monitoring = query("SELECT \(Self.sessionColumns) FROM sessions WHERE status='monitoring' ORDER BY start_time DESC LIMIT 1", map: mapSession).first {
             return fetchDetail(sessionId: monitoring.id)
         }
-        guard let latest = query("SELECT id,start_time,end_time,status,title,summary FROM sessions ORDER BY start_time DESC LIMIT 1", map: mapSession).first else {
+        guard let latest = query("SELECT \(Self.sessionColumns) FROM sessions ORDER BY start_time DESC LIMIT 1", map: mapSession).first else {
             return nil
         }
         return fetchDetail(sessionId: latest.id)
+    }
+
+    // MARK: - Themes
+
+    private func mapTheme(_ stmt: OpaquePointer?) -> MeetingTheme {
+        let t = MeetingTheme(name: text(stmt, 1) ?? "")
+        t.id = sqlite3_column_int64(stmt, 0)
+        t.keywordsJoined = text(stmt, 2) ?? ""
+        t.createdAt = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 3))
+        t.updatedAt = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 4))
+        t.archived = sqlite3_column_int(stmt, 5) != 0
+        return t
+    }
+
+    public func insert(_ t: MeetingTheme) {
+        t.id = run("INSERT INTO themes(name,keywords,created_at,updated_at,archived) VALUES(?,?,?,?,?)") { stmt in
+            bind(stmt, 1, t.name)
+            bind(stmt, 2, t.keywordsJoined)
+            bind(stmt, 3, t.createdAt)
+            bind(stmt, 4, t.updatedAt)
+            sqlite3_bind_int(stmt, 5, t.archived ? 1 : 0)
+        }
+    }
+
+    public func update(_ t: MeetingTheme) {
+        t.updatedAt = Date()
+        run("UPDATE themes SET name=?,keywords=?,updated_at=?,archived=? WHERE id=?") { stmt in
+            bind(stmt, 1, t.name)
+            bind(stmt, 2, t.keywordsJoined)
+            bind(stmt, 3, t.updatedAt)
+            sqlite3_bind_int(stmt, 4, t.archived ? 1 : 0)
+            sqlite3_bind_int64(stmt, 5, t.id)
+        }
+    }
+
+    public func fetchThemes(includeArchived: Bool = true) -> [MeetingTheme] {
+        if includeArchived {
+            return query("SELECT id,name,keywords,created_at,updated_at,archived FROM themes ORDER BY updated_at DESC", map: mapTheme)
+        }
+        return query("SELECT id,name,keywords,created_at,updated_at,archived FROM themes WHERE archived=0 ORDER BY updated_at DESC", map: mapTheme)
+    }
+
+    public func fetchTheme(id: Int64) -> MeetingTheme? {
+        query("SELECT id,name,keywords,created_at,updated_at,archived FROM themes WHERE id=?", bind: { sqlite3_bind_int64($0, 1, id) }, map: mapTheme).first
+    }
+
+    public func fetchSessions(themeId: Int64) -> [MeetingSession] {
+        query("SELECT \(Self.sessionColumns) FROM sessions WHERE theme_id=? ORDER BY start_time DESC", bind: { sqlite3_bind_int64($0, 1, themeId) }, map: mapSession)
+    }
+
+    public func assignSessionTheme(sessionId: Int64, themeId: Int64?) {
+        run("UPDATE sessions SET theme_id=? WHERE id=?") { stmt in
+            if let themeId { sqlite3_bind_int64(stmt, 1, themeId) } else { sqlite3_bind_null(stmt, 1) }
+            sqlite3_bind_int64(stmt, 2, sessionId)
+        }
+    }
+
+    public func mergeThemes(from sourceId: Int64, into targetId: Int64) {
+        run("UPDATE sessions SET theme_id=? WHERE theme_id=?") { stmt in
+            sqlite3_bind_int64(stmt, 1, targetId)
+            sqlite3_bind_int64(stmt, 2, sourceId)
+        }
+        run("DELETE FROM themes WHERE id=?") { sqlite3_bind_int64($0, 1, sourceId) }
+    }
+
+    public func deleteTheme(id: Int64) {
+        run("DELETE FROM themes WHERE id=?") { sqlite3_bind_int64($0, 1, id) }
+    }
+
+    public func updateActionItemStatus(id: Int64, status: ActionItemStatus) {
+        run("UPDATE action_items SET status=? WHERE id=?") { stmt in
+            bind(stmt, 1, status.rawValue)
+            sqlite3_bind_int64(stmt, 2, id)
+        }
     }
 }

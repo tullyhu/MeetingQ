@@ -20,6 +20,7 @@ import AppKit
 public struct HistoryView: View {
     @State private var vm: HistoryViewModel
     @State private var selectedId: Int64?
+    @State private var selectedThemeId: Int64?
     @State private var showDeleteConfirm = false
 
     @MainActor public init(vm: HistoryViewModel? = nil) {
@@ -28,18 +29,49 @@ public struct HistoryView: View {
 
     public var body: some View {
         NavigationSplitView {
-            List(selection: $selectedId) {
-                ForEach(vm.sessions) { item in
-                    SessionRow(item: item)
-                        .tag(item.sessionId)
+            VStack(spacing: 0) {
+                Picker("", selection: $vm.mode) {
+                    ForEach(HistoryViewModel.Mode.allCases, id: \.self) { m in
+                        Text(m.label).tag(m)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+
+                if vm.mode == .meetings {
+                    List(selection: $selectedId) {
+                        ForEach(vm.sessions) { item in
+                            SessionRow(item: item)
+                                .tag(item.sessionId)
+                        }
+                    }
+                    .listStyle(.sidebar)
+                    .searchable(text: $vm.searchText, placement: .sidebar,
+                                prompt: tr("搜索标题或议题", "Search title or topic"))
+                } else {
+                    List(selection: $selectedThemeId) {
+                        ForEach(vm.themes.filter { !$0.archived }) { item in
+                            ThemeRow(item: item)
+                                .tag(item.id)
+                        }
+                        let archived = vm.themes.filter { $0.archived }
+                        if !archived.isEmpty {
+                            Section(tr("已归档", "Archived")) {
+                                ForEach(archived) { item in
+                                    ThemeRow(item: item)
+                                        .tag(item.id)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.sidebar)
                 }
             }
-            .listStyle(.sidebar)
-            .searchable(text: $vm.searchText, placement: .sidebar,
-                        prompt: tr("搜索标题或议题", "Search title or topic"))
             .navigationTitle(tr("历史会议", "History"))
             .safeAreaInset(edge: .bottom) {
-                Text(vm.statusText)
+                Text(vm.mode == .meetings ? vm.statusText : tr("共 \(vm.themes.count) 个主题", "\(vm.themes.count) themes"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -57,6 +89,9 @@ public struct HistoryView: View {
         .onChange(of: selectedId) { _, newValue in
             vm.selectSession(vm.sessions.first { $0.sessionId == newValue })
         }
+        .onChange(of: selectedThemeId) { _, newValue in
+            vm.selectTheme(newValue)
+        }
         .onChange(of: vm.sessions.map(\.sessionId)) { _, _ in
             selectedId = vm.selectedSession?.sessionId
         }
@@ -70,10 +105,25 @@ public struct HistoryView: View {
 
     @ViewBuilder
     private var detailPane: some View {
-        if let session = vm.selectedSession {
+        if vm.mode == .themes {
+            if let themeId = selectedThemeId, let theme = vm.themes.first(where: { $0.id == themeId }) {
+                ThemeDetailView(theme: theme, vm: vm)
+                    .overlay(alignment: .topTrailing) {
+                        if vm.isLoadingThemeDetail {
+                            ProgressView().controlSize(.small).padding(12)
+                        }
+                    }
+            } else {
+                ContentUnavailableView {
+                    Label(tr("主题聚合", "Themes"), systemImage: "square.stack.3d.up")
+                } description: {
+                    Text(tr("从左侧选择一个主题，查看跨会议聚合视图", "Select a theme to see cross-meeting aggregation"))
+                }
+            }
+        } else if let session = vm.selectedSession {
             SessionDetailView(session: session, vm: vm, onDelete: { showDeleteConfirm = true })
                 .overlay(alignment: .topTrailing) {
-                    if vm.isLoadingDetail {
+                    if vm.isLoadingDetail || vm.isRegenerating {
                         ProgressView()
                             .controlSize(.small)
                             .padding(12)
@@ -86,6 +136,33 @@ public struct HistoryView: View {
                 Text(tr("从左侧选择一条会议记录", "Select a meeting record from the sidebar"))
             }
         }
+    }
+}
+
+private struct ThemeRow: View {
+    let item: ThemeItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(item.name)
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+            HStack(spacing: 4) {
+                Text(tr("\(item.meetingCount) 次会议", "\(item.meetingCount) meetings"))
+                if item.openActionCount > 0 {
+                    Text("·")
+                    Text(tr("\(item.openActionCount) 待办", "\(item.openActionCount) open"))
+                        .foregroundStyle(.orange)
+                }
+                if let date = item.latestMeetingDate {
+                    Text("·")
+                    Text(HistoryFormatters.monthDay.string(from: date))
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 2)
     }
 }
 
@@ -107,6 +184,11 @@ private struct SessionRow: View {
                 Text(item.transcriptCountLabel)
                 if item.hasScreenshots {
                     Image(systemName: "photo.on.rectangle")
+                }
+                if let theme = item.themeName {
+                    Text("·")
+                    Text(theme)
+                        .foregroundStyle(Color.accentColor)
                 }
             }
             .font(.caption2)
@@ -137,9 +219,13 @@ private struct SessionDetailView: View {
                 HStack(spacing: 10) {
                     Spacer()
                     Menu {
-                        Button(tr("会议纪要 (.md)", "Minutes (.md)")) { vm.exportMarkdown() }
-                        Button(tr("会议纪要 (.html)", "Minutes (.html)")) { vm.exportHtml() }
-                        Button(tr("转写记录 (.txt)", "Transcript (.txt)")) { vm.exportText() }
+                        Button(tr("会议纪要 (.md)", "Minutes (.md)")) { vm.exportMinutesMarkdown() }
+                        Button(tr("会议纪要 (.html)", "Minutes (.html)")) { vm.exportMinutesHtml() }
+                        Divider()
+                        Button(tr("会议记录 (.md)", "Record (.md)")) { vm.exportRecordMarkdown() }
+                        Button(tr("会议记录 (.html)", "Record (.html)")) { vm.exportRecordHtml() }
+                        Divider()
+                        Button(tr("纯文本 (.txt)", "Plain text (.txt)")) { vm.exportText() }
                     } label: {
                         Label(tr("导出", "Export"), systemImage: "square.and.arrow.up")
                             .font(.callout)
@@ -161,7 +247,63 @@ private struct SessionDetailView: View {
                 Text("\(session.dateLabel)  ·  \(session.durationLabel)  ·  \(session.transcriptCountLabel)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .padding(.bottom, 18)
+                    .padding(.bottom, 6)
+
+                HStack(spacing: 8) {
+                    if let typeName = session.meetingTypeName {
+                        Label(typeName, systemImage: "tag")
+                            .font(.caption)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Color.accentColor.opacity(0.12))
+                            .foregroundStyle(Color.accentColor)
+                            .clipShape(Capsule())
+                    }
+                    if let templateName = session.templateName {
+                        Menu {
+                            ForEach(MinutesTemplateLibrary.all, id: \.id) { t in
+                                Button(t.name) { vm.regenerateMinutes(templateId: t.id) }
+                            }
+                        } label: {
+                            Label(templateName, systemImage: "doc.text")
+                                .font(.caption)
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(Color.purple.opacity(0.12))
+                                .foregroundStyle(.purple)
+                                .clipShape(Capsule())
+                        }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        .help(tr("点击换模板重新生成纪要", "Switch template and regenerate minutes"))
+                    }
+                    if let score = session.qualityScore {
+                        let color: Color = score >= 90 ? .green : (score >= 70 ? .orange : .red)
+                        Label(tr("质量 \(score)", "Quality \(score)"), systemImage: "checkmark.seal")
+                            .font(.caption)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(color.opacity(0.12))
+                            .foregroundStyle(color)
+                            .clipShape(Capsule())
+                            .help(session.qualityIssues ?? tr("质量评估通过", "Quality check passed"))
+                    }
+                    Menu {
+                        Button(tr("未归类", "No theme")) { vm.assignSessionToTheme(sessionId: session.sessionId, themeId: nil) }
+                        Divider()
+                        ForEach(vm.themes.filter { !$0.archived }) { t in
+                            Button(t.name) { vm.assignSessionToTheme(sessionId: session.sessionId, themeId: t.id) }
+                        }
+                    } label: {
+                        Label(session.themeName ?? tr("未归类", "No theme"), systemImage: "square.stack.3d.up")
+                            .font(.caption)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Color.teal.opacity(0.12))
+                            .foregroundStyle(.teal)
+                            .clipShape(Capsule())
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help(tr("所属主题（点击改派）", "Theme (click to reassign)"))
+                }
+                .padding(.bottom, 14)
 
                 SectionHeader(title: tr("议题", "Topics"))
                 Text(session.topicsLabel)
@@ -182,10 +324,17 @@ private struct SessionDetailView: View {
                 if session.hasDecisions {
                     SectionHeader(title: tr("决策", "Decisions"))
                     VStack(alignment: .leading, spacing: 4) {
-                        ForEach(Array(session.decisions.enumerated()), id: \.offset) { _, d in
+                        ForEach(session.decisions) { d in
                             Label {
-                                Text(d)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(d.text)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    if let src = d.sourceLabel {
+                                        Text(tr("来源 ", "Source ") + src)
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                }
                             } icon: {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(.green)
@@ -197,15 +346,27 @@ private struct SessionDetailView: View {
                 }
 
                 if session.hasActionItems {
-                    SectionHeader(title: tr("行动项", "Action Items"))
+                    SectionHeader(title: tr("行动项（点击状态可切换）", "Action Items (click status to toggle)"))
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(session.actionItems) { a in
-                            Label {
-                                Text(a.label)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            } icon: {
-                                Image(systemName: "arrow.right.circle.fill")
-                                    .foregroundStyle(.orange)
+                            HStack(alignment: .top, spacing: 8) {
+                                Button {
+                                    vm.cycleActionStatus(dbId: a.dbId, current: a.status)
+                                } label: {
+                                    Text(a.status == .complete ? "✅" : (a.deadline != nil && a.status != .complete ? "⏳" : "⏳"))
+                                        .font(.callout)
+                                }
+                                .buttonStyle(.plain)
+                                .help(tr("切换状态：待开始 → 进行中 → 已完成", "Toggle: not started → in progress → done"))
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text((a.priority.map { StructuredMinutes.priorityIcon($0) + " " } ?? "") + a.label)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .strikethrough(a.status == .complete)
+                                        .foregroundStyle(a.status == .complete ? .secondary : .primary)
+                                    Text(a.statusLabel + (a.sourceSpeaker.map { tr(" · 提出：", " · by: ") + $0 } ?? ""))
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
                             }
                             .font(.callout)
                         }
@@ -329,6 +490,182 @@ private struct FlowLayout: Layout {
             x += size.width + spacing
             rowHeight = max(rowHeight, size.height)
         }
+    }
+}
+
+private struct ThemeDetailView: View {
+    let theme: ThemeItem
+    let vm: HistoryViewModel
+    @State private var editingName = false
+    @State private var draftName = ""
+    @State private var statusFilter: ActionItemStatus?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 10) {
+                    if editingName {
+                        TextField(tr("主题名称", "Theme name"), text: $draftName)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 260)
+                        Button(tr("保存", "Save")) {
+                            vm.renameTheme(theme.id, to: draftName)
+                            editingName = false
+                        }
+                        Button(tr("取消", "Cancel")) { editingName = false }
+                    } else {
+                        Text(theme.name)
+                            .font(.title3.weight(.semibold))
+                        Button {
+                            draftName = theme.name
+                            editingName = true
+                        } label: {
+                            Image(systemName: "pencil")
+                        }
+                        .buttonStyle(.borderless)
+                        .help(tr("重命名主题", "Rename theme"))
+                    }
+                    Spacer()
+                    Menu {
+                        ForEach(vm.themes.filter { !$0.archived && $0.id != theme.id }) { other in
+                            Button(tr("合并到「\(other.name)」", "Merge into \"\(other.name)\"")) {
+                                vm.mergeTheme(sourceId: theme.id, into: other.id)
+                            }
+                        }
+                        if vm.themes.filter({ !$0.archived && $0.id != theme.id }).isEmpty {
+                            Text(tr("（无其他主题可合并）", "(No other theme to merge)"))
+                        }
+                        Divider()
+                        Button(theme.archived ? tr("取消归档", "Unarchive") : tr("归档", "Archive")) {
+                            vm.setThemeArchived(theme.id, archived: !theme.archived)
+                        }
+                    } label: {
+                        Label(tr("操作", "Actions"), systemImage: "ellipsis.circle")
+                            .font(.callout)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.visible)
+                    .fixedSize()
+                }
+                .padding(.bottom, 6)
+
+                if !theme.keywords.isEmpty {
+                    Text(tr("关键词：", "Keywords: ") + theme.keywords.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.bottom, 8)
+                }
+
+                if let detail = vm.themeDetail {
+                    let completed = detail.trackedActions.filter { $0.status == .complete }.count
+                    HStack(spacing: 16) {
+                        statBlock(tr("会议次数", "Meetings"), "\(detail.meetings.count)")
+                        statBlock(tr("累计决策", "Decisions"), "\(detail.totalDecisions)")
+                        statBlock(tr("累计行动项", "Actions"), "\(detail.trackedActions.count)")
+                        statBlock(tr("已完成", "Done"), "\(completed)")
+                    }
+                    .padding(.vertical, 12)
+
+                    SectionHeader(title: tr("会议时间线", "Meeting Timeline"))
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(detail.meetings) { m in
+                            HStack(spacing: 10) {
+                                Text(HistoryFormatters.monthDay.string(from: m.startTime))
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 52, alignment: .leading)
+                                Text(m.title)
+                                    .font(.callout)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(tr("决策 \(m.decisionsCount)", "D \(m.decisionsCount)"))
+                                    .font(.caption2)
+                                    .foregroundStyle(.green)
+                                Text(tr("行动 \(m.actionsCount)", "A \(m.actionsCount)"))
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                            }
+                            .padding(.vertical, 3)
+                            .padding(.horizontal, 8)
+                            .background(Color(nsColor: .controlBackgroundColor))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                    }
+                    .padding(.bottom, 20)
+
+                    if !detail.trackedActions.isEmpty {
+                        HStack {
+                            SectionHeader(title: tr("跨会议行动项追踪", "Cross-meeting Action Tracking"))
+                            Spacer()
+                            Picker("", selection: $statusFilter) {
+                                Text(tr("全部", "All")).tag(ActionItemStatus?.none)
+                                Text(tr("待开始", "Not started")).tag(ActionItemStatus?.some(.notStarted))
+                                Text(tr("进行中", "In progress")).tag(ActionItemStatus?.some(.inProgress))
+                                Text(tr("已完成", "Done")).tag(ActionItemStatus?.some(.complete))
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(maxWidth: 300)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(detail.trackedActions.filter { statusFilter == nil || $0.status == statusFilter }) { a in
+                                HStack(alignment: .top, spacing: 8) {
+                                    Button {
+                                        vm.cycleActionStatus(dbId: a.dbId, current: a.status)
+                                    } label: {
+                                        Text(a.status == .complete ? "✅" : (a.isOverdue ? "🔴" : "⏳"))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help(tr("切换状态", "Toggle status"))
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        HStack(spacing: 6) {
+                                            Text((a.priority.map { StructuredMinutes.priorityIcon($0) + " " } ?? "") + a.task)
+                                                .font(.callout)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                                .strikethrough(a.status == .complete)
+                                            if a.mentionCount > 1 {
+                                                Text(tr("第 \(a.mentionCount) 次提及", "×\(a.mentionCount)"))
+                                                    .font(.caption2)
+                                                    .padding(.horizontal, 6).padding(.vertical, 1)
+                                                    .background(Color.orange.opacity(0.15))
+                                                    .foregroundStyle(.orange)
+                                                    .clipShape(Capsule())
+                                            }
+                                        }
+                                        Text("\(a.owner)\(a.deadline.map { " · " + $0 } ?? "") · \(a.statusLabel) · \(HistoryFormatters.monthDay.string(from: a.sourceMeetingDate)) \(a.sourceMeetingTitle)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                }
+                                .padding(.vertical, 3)
+                                .padding(.horizontal, 8)
+                                .background(Color(nsColor: .controlBackgroundColor))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                        }
+                    }
+                } else if vm.isLoadingThemeDetail {
+                    ProgressView()
+                        .padding(.top, 20)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(EdgeInsets(top: 20, leading: 24, bottom: 20, trailing: 24))
+        }
+    }
+
+    private func statBlock(_ label: String, _ value: String) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.title3.weight(.semibold))
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(minWidth: 64)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

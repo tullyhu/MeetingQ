@@ -53,11 +53,26 @@ On a hit: popup alert (can be pinned) → instant screenshot → shows the origi
 - **Local LLM first**: designed for large-memory Apple Silicon Macs — connect directly to a local OpenAI-compatible server such as oMLX. Zero API cost, fully offline, data never leaves the machine
 - **Qwen3.6-series multimodal models recommended**: joint text + image understanding — reads transcripts *and* "sees" slides, charts, code and speakers in screenshots, producing **deeper meeting minutes**: not just "who said what", but "what was shown on screen and what the data means"
 - **Cloud freedom**: works with DeepSeek, Qwen, Kimi, OpenAI and any OpenAI-compatible endpoint
-- Automatic topic detection (every 20 transcript lines), automatic decision & action-item extraction, on-demand quick summaries anytime
+- Automatic topic detection (every 20 transcript lines), automatic decision & action-item extraction (with priority and source-speaker attribution), on-demand quick summaries anytime
+
+### 🪄 Smart Templates & Dual-Document Output (New in v1.4)
+- **Automatic meeting-type detection**: after the meeting, local features (technical/business term density, decision density, duration, slide/chart screen features) predict the meeting type
+- **Automatic template recommendation**: 6 minutes templates (Executive Business / Technical Review / Client Meeting / Project Weekly / Daily Standup / Brainstorming) matched by weighted multimodal features; switch templates and regenerate with one click in History
+- **Quality scoring**: decision/action-item recall, format compliance, template conformance and language quality — low scores are flagged for review
+- **Minutes ≠ Record — separate exports**:
+  - **Meeting Minutes**: an executive summary readable in 30 seconds — highlighted core-summary box, decision/action/risk color cards, action-item master table (owner / due / priority / status / source topic)
+  - **Meeting Record**: a searchable full archive — agenda timeline, per-topic sections, decision & action-item callouts inline at the source utterance (with timestamp + speaker), key-moments index at the end
+  - Both in Markdown / HTML (self-contained, screenshots embedded, ready to share)
+
+### 🗂️ Cross-Meeting Theme Aggregation (New in v1.4)
+- Finished meetings are automatically assigned to a **theme** (e.g. "Product Launch Prep"): local bigram pre-filter + LLM semantic arbitration, with a pure-local fallback
+- New "Themes" tab in History: per-theme timeline (decisions/actions added per meeting) and cumulative stats
+- **Cross-meeting action tracking**: recurring tasks are auto-clustered ("mentioned N×" badge); status is user-editable (not started / in progress / done) with overdue highlighting
+- Themes can be renamed, archived, merged; meetings can be manually reassigned
 
 ### 📸 Automatic Screenshots & Vision Analysis
 - Auto-screenshot every 30 seconds (64×36 thumbnail MD5 dedup — unchanged frames aren't stored)
-- Multimodal LLM interprets screenshots: charts / documents / code, and even the **currently-speaking person's name** in the meeting UI
+- Multimodal LLM interprets screenshots: charts / documents / code, and even the **currently-speaking person's name** in the meeting UI; **key dates, decisions and action items on slides** are extracted structurally to cross-check spoken conclusions
 - **On-device OCR in two modes**: choose "Multimodal LLM" or "On-device OCR (offline)" as the screenshot analysis engine in Settings; in LLM mode, failed analyses are retried and then fall back to macOS on-device OCR so on-screen text is never lost
 - Screenshot timeline: browse the entire meeting visually
 
@@ -130,10 +145,12 @@ VERSION=1.3.0 ./scripts/package-dmg.sh
 - **✅ Got it**: acknowledge and close (5-second cooldown to avoid repeated interruptions)
 
 ### Meeting History
-- Search the session list on the left (by title/topic), full details on the right
+- "Meetings / Themes" tabs: search and inspect meetings, or browse cross-meeting theme aggregation
+- Header badges on the meeting detail: meeting type · minutes template (click to switch and regenerate) · quality score · theme (click to reassign)
+- Click an action item's icon to cycle its status (not started → in progress → done)
 - Export formats:
-  - **Markdown**: timeline (transcripts interleaved with screenshots) + topics + decision/action-item tables; screenshots copied to `_files/`
-  - **HTML**: styled, screenshots embedded as Base64 — a single shareable file
+  - **Meeting Minutes (.md/.html)**: template-rendered executive summary (highlighted core-summary box + decision/action/risk cards + action master table)
+  - **Meeting Record (.md/.html)**: full transcript grouped by topic, with inline decision/action markers and a key-moments index
   - **TXT**: plain transcript text
 
 ### Data Locations
@@ -153,8 +170,9 @@ VERSION=1.3.0 ./scripts/package-dmg.sh
 | Audio capture | ScreenCaptureKit system audio + AVAudioEngine microphone (dual-track independent transcription) |
 | Screenshots | ScreenCaptureKit, 64×36 thumbnail MD5 dedup |
 | LLM | Any OpenAI-compatible API (local oMLX or cloud) |
-| Vision analysis | Multimodal LLM (OCR / chart understanding / speaker detection), auto-retry then fallback to Vision framework on-device OCR; pure on-device OCR mode also available |
+| Vision analysis | Multimodal LLM (OCR / chart understanding / speaker detection / on-slide decision & action-item extraction), auto-retry then fallback to Vision framework on-device OCR; pure on-device OCR mode also available |
 | Name detection | Regex + pinyin fuzzy matching (built-in ~600-character table, self-learning variants) + LLM semantics |
+| Smart minutes | On-device feature extraction (keyword density / screen aggregation) + weighted template recommendation + 4-dimension quality assessment + theme assignment (bigram pre-filter + LLM arbitration) |
 | Storage | SQLite3 (WAL) + macOS Keychain |
 | Build | Pure `swiftc`, zero third-party dependencies |
 
@@ -173,9 +191,9 @@ CalledMe/
 │   └── package-dmg.sh            # Generate DMG + optional notarization
 └── Sources/CalledMe/
     ├── App/                      # Entry, startup flow (language → privacy → onboarding → main window)
-    ├── Models/                   # Session / topic / transcript / screenshot / decision / action item
+    ├── Models/                   # Session / topic / transcript / screenshot / decision / action item / theme
     ├── Infrastructure/           # Localization, SQLite, Keychain, pinyin matching, single instance, menu bar
-    ├── Services/                 # Audio capture, transcription, LLM, screenshots, vision, name detection, VAD
+    ├── Services/                 # Audio capture, transcription, LLM, screenshots, vision, name detection, VAD, templates, feature extraction, quality assessment, theme classifier, minutes renderer
     ├── ViewModels/               # Floating window / settings / history / screenshot album / diagnostics
     └── Views/                    # SwiftUI UI, onboarding, popups
 ```

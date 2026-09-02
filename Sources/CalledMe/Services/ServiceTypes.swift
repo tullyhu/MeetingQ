@@ -107,6 +107,11 @@ public struct VisionAnalysisResult: Sendable {
     public var contentType: String = "other"
     public var keyEntities: [String] = []
     public var keyNumbers: [String] = []
+    public var keyDates: [String] = []
+    public var slideDecisions: [String] = []
+    public var slideActionItems: [String] = []
+    public var chartType: String?
+    public var chartInsight: String?
     public var ocrText: String = ""
     public var meetingRelevance: String = "medium"
     public var sensitivityLevel: String = "low"

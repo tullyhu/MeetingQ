@@ -35,6 +35,12 @@ public final class MeetingSession {
     public var statusRaw: String = SessionStatus.idle.rawValue
     public var title: String?
     public var summary: String?
+    public var themeId: Int64?
+    public var meetingType: String?
+    public var templateId: String?
+    public var qualityScore: Int?
+    public var qualityIssues: String?
+    public var minutesJson: String?
     public var topics: [Topic] = []
     public var screenshots: [Screenshot] = []
 
@@ -103,6 +109,11 @@ public final class Screenshot {
     public var contentType: String?
     public var keyEntities: String?
     public var keyNumbers: String?
+    public var keyDates: String?
+    public var slideDecisions: String?
+    public var slideActionItems: String?
+    public var chartType: String?
+    public var chartInsight: String?
     public var meetingRelevance: String?
     public var sensitivityLevel: String?
     public var analysisStatus: String?
@@ -123,6 +134,7 @@ public final class Decision {
     public var id: Int64 = 0
     public var timestamp: Date
     public var decisionText: String
+    public var sourceSpeaker: String?
     public weak var topic: Topic?
     public var topicId: Int64 = 0
 
@@ -165,12 +177,21 @@ public final class Question {
     }
 }
 
+public enum ActionItemStatus: String, Codable, Sendable, CaseIterable {
+    case notStarted = "not_started"
+    case inProgress = "in_progress"
+    case complete
+}
+
 public final class ActionItem {
     public var id: Int64 = 0
     public var timestamp: Date
     public var assignedTo: String
     public var task: String
     public var deadline: String?
+    public var statusRaw: String = ActionItemStatus.notStarted.rawValue
+    public var priority: String?
+    public var sourceSpeaker: String?
     public weak var topic: Topic?
     public var topicId: Int64 = 0
 
@@ -181,5 +202,37 @@ public final class ActionItem {
         self.deadline = deadline
         self.topic = topic
         self.topicId = topic?.id ?? 0
+    }
+
+    public var status: ActionItemStatus {
+        get { ActionItemStatus(rawValue: statusRaw) ?? .notStarted }
+        set { statusRaw = newValue.rawValue }
+    }
+
+    public var isOverdue: Bool {
+        guard status != .complete, let deadline, !deadline.isEmpty else { return false }
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        guard let due = f.date(from: String(deadline.prefix(10))) else { return false }
+        return due < Calendar.current.startOfDay(for: Date())
+    }
+}
+
+public final class MeetingTheme {
+    public var id: Int64 = 0
+    public var name: String
+    public var keywords: [String] = []
+    public var createdAt: Date = Date()
+    public var updatedAt: Date = Date()
+    public var archived: Bool = false
+
+    public init(name: String, keywords: [String] = []) {
+        self.name = name
+        self.keywords = keywords
+    }
+
+    public var keywordsJoined: String {
+        get { keywords.joined(separator: ",") }
+        set { keywords = newValue.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
     }
 }

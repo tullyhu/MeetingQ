@@ -126,7 +126,7 @@ public final class FloatingWindowViewModel {
     private var pendingSpeakerLabels: Set<String> = []
     private var pendingVisionCount = 0
     private var currentDecisions: [String] = []
-    private var currentActionItems: [(assignedTo: String, task: String, deadline: String?)] = []
+    private var currentActionItems: [(assignedTo: String, task: String, deadline: String?, priority: String?, speaker: String?)] = []
     private var transcriptsSinceConclusionCheck = 0
     private var conclusionDetecting = false
 
@@ -733,8 +733,8 @@ public final class FloatingWindowViewModel {
             let parsed = Self.parseSummaryJson(response)
 
             if !parsed.decisions.isEmpty {
-                for d in parsed.decisions where !currentDecisions.contains(where: { $0.caseInsensitiveCompare(d) == .orderedSame }) {
-                    currentDecisions.append(d)
+                for d in parsed.decisions where !currentDecisions.contains(where: { $0.caseInsensitiveCompare(d.text) == .orderedSame }) {
+                    currentDecisions.append(d.text)
                 }
                 if let topic = currentTopicRef {
                     saveDecisions(topic: topic, parsed.decisions)
@@ -813,7 +813,7 @@ public final class FloatingWindowViewModel {
             if AppLanguage.current.isEnglish {
                 return """
                 Analyze the following meeting transcript and return JSON in this format:
-                {"summary":"key points (2-5 sentences)","decisions":["decision 1","decision 2"],"actions":[{"assignedTo":"owner","task":"specific task","deadline":"deadline or null"}]}
+                {"summary":"key points (2-5 sentences)","decisions":[{"text":"decision","speaker":"who stated it or null"}],"actions":[{"assignedTo":"owner","task":"specific task","deadline":"deadline or null","priority":"high/medium/low or null","speaker":"who proposed or null"}]}
 
                 Put only clear decisions in "decisions"; put only action items with a clear owner in "actions".
                 Return empty arrays if none. Return JSON only, no Markdown. \(roleHint)
@@ -825,7 +825,7 @@ public final class FloatingWindowViewModel {
             }
             return """
             请分析以下会议转录内容，以JSON格式返回，格式：
-            {"summary":"要点摘要（2-5句话）","decisions":["决策1","决策2"],"actions":[{"assignedTo":"负责人","task":"具体任务","deadline":"截止时间或null"}]}
+            {"summary":"要点摘要（2-5句话）","decisions":[{"text":"决策内容","speaker":"提出人，未知则null"}],"actions":[{"assignedTo":"负责人","task":"具体任务","deadline":"截止时间或null","priority":"high/medium/low或null","speaker":"提出人，未知则null"}]}
 
             decisions 只放明确的决策结论；actions 只放有明确负责人的行动项。
             若无则返回空数组。只返回JSON，不要Markdown标记。\(roleHint)
@@ -870,7 +870,7 @@ public final class FloatingWindowViewModel {
         return sb
     }
 
-    static func parseSummaryJson(_ json: String) -> (summary: String, decisions: [String], actions: [(assignedTo: String, task: String, deadline: String?)]) {
+    static func parseSummaryJson(_ json: String) -> (summary: String, decisions: [(text: String, speaker: String?)], actions: [(assignedTo: String, task: String, deadline: String?, priority: String?, speaker: String?)]) {
         var text = json
         if let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"), end > start {
             text = String(text[start...end])
@@ -880,15 +880,27 @@ public final class FloatingWindowViewModel {
             return (json, [], [])
         }
         let summary = root["summary"] as? String ?? ""
-        let decisions = (root["decisions"] as? [Any])?.compactMap { $0 as? String }.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ?? []
-        var actions: [(String, String, String?)] = []
+        var decisions: [(String, String?)] = []
+        if let raw = root["decisions"] as? [Any] {
+            for item in raw {
+                if let s = item as? String, !s.trimmingCharacters(in: .whitespaces).isEmpty {
+                    decisions.append((s, nil))
+                } else if let obj = item as? [String: Any], let s = obj["text"] as? String,
+                          !s.trimmingCharacters(in: .whitespaces).isEmpty {
+                    decisions.append((s, obj["speaker"] as? String))
+                }
+            }
+        }
+        var actions: [(String, String, String?, String?, String?)] = []
         if let rawActions = root["actions"] as? [[String: Any]] {
             for item in rawActions {
-                let assignedTo = item["assignedTo"] as? String ?? ""
+                let assignedTo = item["assignedTo"] as? String ?? item["owner"] as? String ?? ""
                 let task = item["task"] as? String ?? ""
                 let deadline = item["deadline"] as? String
+                let priority = StructuredMinutes.normalizePriority(item["priority"] as? String)
+                let speaker = item["speaker"] as? String
                 if !task.trimmingCharacters(in: .whitespaces).isEmpty {
-                    actions.append((assignedTo, task, deadline))
+                    actions.append((assignedTo, task, deadline, priority, speaker))
                 }
             }
         }
@@ -1284,6 +1296,17 @@ public final class FloatingWindowViewModel {
                     if let data = try? JSONEncoder().encode(result.keyNumbers) {
                         record.keyNumbers = String(data: data, encoding: .utf8)
                     }
+                    if let data = try? JSONEncoder().encode(result.keyDates) {
+                        record.keyDates = String(data: data, encoding: .utf8)
+                    }
+                    if let data = try? JSONEncoder().encode(result.slideDecisions) {
+                        record.slideDecisions = String(data: data, encoding: .utf8)
+                    }
+                    if let data = try? JSONEncoder().encode(result.slideActionItems) {
+                        record.slideActionItems = String(data: data, encoding: .utf8)
+                    }
+                    record.chartType = result.chartType
+                    record.chartInsight = result.chartInsight
                     record.sensitivityLevel = result.sensitivityLevel
                     record.activeSpeakerName = result.activeSpeakerName
                     record.analysisStatus = "ready"
@@ -1473,7 +1496,7 @@ public final class FloatingWindowViewModel {
             if AppLanguage.current.isEnglish {
                 prompt = """
                 Extract clear decisions and action items with a clear owner from the following meeting conversation, and return JSON:
-                {"decisions":["decision 1"],"actions":[{"assignedTo":"owner","task":"task","deadline":"deadline or null"}]}
+                {"decisions":[{"text":"decision","speaker":"who stated it or null"}],"actions":[{"assignedTo":"owner","task":"task","deadline":"deadline or null","priority":"high/medium/low or null","speaker":"who proposed or null"}]}
                 Return empty arrays if none. Return JSON only, no Markdown.
 
                 Transcript:
@@ -1482,7 +1505,7 @@ public final class FloatingWindowViewModel {
             } else {
                 prompt = """
                 从以下会议对话中提取明确的决策结论和有明确负责人的行动项，以JSON格式返回：
-                {"decisions":["决策1"],"actions":[{"assignedTo":"负责人","task":"任务","deadline":"截止时间或null"}]}
+                {"decisions":[{"text":"决策内容","speaker":"提出人，未知则null"}],"actions":[{"assignedTo":"负责人","task":"任务","deadline":"截止时间或null","priority":"high/medium/low或null","speaker":"提出人，未知则null"}]}
                 若无则返回空数组。只返回JSON，不要Markdown。
 
                 转录内容：
@@ -1495,13 +1518,13 @@ public final class FloatingWindowViewModel {
 
             if !parsed.decisions.isEmpty {
                 let newOnes = parsed.decisions.filter {
-                    d in !currentDecisions.contains(where: { $0.caseInsensitiveCompare(d) == .orderedSame })
+                    d in !currentDecisions.contains(where: { $0.caseInsensitiveCompare(d.text) == .orderedSame })
                 }
-                currentDecisions.append(contentsOf: newOnes)
+                currentDecisions.append(contentsOf: newOnes.map(\.text))
                 if currentDecisions.count > 50 {
                     currentDecisions.removeFirst(currentDecisions.count - 50)
                 }
-                for d in newOnes { contextManager?.addDecision(d) }
+                for d in newOnes { contextManager?.addDecision(d.text) }
                 if !newOnes.isEmpty, let topic = currentTopicRef {
                     saveDecisions(topic: topic, newOnes)
                 }
@@ -1524,15 +1547,20 @@ public final class FloatingWindowViewModel {
         }
     }
 
-    private func saveDecisions(topic: Topic, _ decisions: [String]) {
-        for text in decisions {
-            DataStore.shared.insert(Decision(timestamp: Date(), decisionText: text, topic: topic))
+    private func saveDecisions(topic: Topic, _ decisions: [(text: String, speaker: String?)]) {
+        for item in decisions {
+            let d = Decision(timestamp: Date(), decisionText: item.text, topic: topic)
+            d.sourceSpeaker = item.speaker
+            DataStore.shared.insert(d)
         }
     }
 
-    private func saveActionItems(topic: Topic, _ items: [(assignedTo: String, task: String, deadline: String?)]) {
+    private func saveActionItems(topic: Topic, _ items: [(assignedTo: String, task: String, deadline: String?, priority: String?, speaker: String?)]) {
         for item in items {
-            DataStore.shared.insert(ActionItem(timestamp: Date(), assignedTo: item.assignedTo, task: item.task, deadline: item.deadline, topic: topic))
+            let a = ActionItem(timestamp: Date(), assignedTo: item.assignedTo, task: item.task, deadline: item.deadline, topic: topic)
+            a.priority = item.priority
+            a.sourceSpeaker = item.speaker
+            DataStore.shared.insert(a)
         }
     }
 
@@ -1615,19 +1643,11 @@ public final class FloatingWindowViewModel {
         }
 
         if topics.contains(where: { !$0.transcripts.isEmpty }) {
-            let prompt = Self.buildFinalSummaryPrompt(session: session, topics: topics, screenshots: screenshots)
-            do {
-                let response = try await withTimeout(60) { [llm] in try await llm.analyze(prompt) }
-                var json = response.trimmingCharacters(in: .whitespacesAndNewlines)
-                if json.hasPrefix("```") {
-                    json = json.replacingOccurrences(of: #"^```\w*\n?|\n?```$"#, with: "", options: .regularExpression)
-                }
-                if let data = json.data(using: .utf8),
-                   let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    session.summary = root["summary"] as? String
-                }
-            } catch {
-            }
+            await generateFinalMinutes(session: session, topics: topics, screenshots: screenshots)
+        }
+
+        if session.themeId == nil {
+            session.themeId = await ThemeClassifier.classify(session: session, llm: llm)
         }
 
         session.endTime = Date()
@@ -1636,145 +1656,65 @@ public final class FloatingWindowViewModel {
         NotificationCenter.default.post(name: .mmSessionEnded, object: nil)
     }
 
-    private static func buildFinalSummaryPrompt(session: MeetingSession, topics: [Topic], screenshots: [Screenshot]) -> String {
-        var sb = ""
+    private func generateFinalMinutes(session: MeetingSession, topics: [Topic], screenshots: [Screenshot]) async {
+        let features = MeetingFeatureExtractor.extract(session: session)
+        let recommendation = TemplateRecommender.recommend(features: features)
+        let template = MinutesTemplateLibrary.byId(recommendation.best.templateId)
 
-        let en = AppLanguage.current.isEnglish
+        session.meetingType = features.predictedType
+        session.templateId = template.id
 
-        let duration: String
-        if let end = session.endTime {
-            let seconds = Int(end.timeIntervalSince(session.startTime))
-            duration = String(format: "%02d:%02d", seconds / 3600, (seconds / 60) % 60)
-        } else {
-            duration = en ? "unknown" : "未知"
+        let prompt = MinutesPromptBuilder.build(template: template,
+                                                features: features,
+                                                session: session,
+                                                topics: topics,
+                                                screenshots: screenshots,
+                                                hhmm: Self.hhmm,
+                                                hhmmss: Self.hhmmss)
+        do {
+            let response = try await withTimeout(90) { [llm] in try await llm.analyze(prompt) }
+            let minutes = StructuredMinutes.parseLlmResponse(response)
+            if !minutes.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                session.summary = minutes.summary
+            }
+            session.minutesJson = minutes.encoded()
+            enrichFromStructuredMinutes(minutes, topics: topics)
+
+            let quality = MinutesQualityAssessor.assess(minutes: minutes, topics: topics, template: template)
+            session.qualityScore = quality.score
+            session.qualityIssues = quality.issues.isEmpty ? nil : quality.issues.joined(separator: "\n")
+        } catch {
         }
+        DataStore.shared.update(session)
+    }
 
-        let fullFormatter = DateFormatter()
-        fullFormatter.dateFormat = "yyyy-MM-dd HH:mm"
-
-        if en {
-            sb += "You are a meeting minutes assistant. Generate a structured meeting summary based on the complete meeting data below.\n\n"
-            sb += "Meeting title: \(session.title ?? "Untitled")\n"
-            sb += "Meeting time: \(fullFormatter.string(from: session.startTime)) to \(session.endTime.map { fullFormatter.string(from: $0) } ?? "in progress")\n"
-            sb += "Duration: \(duration)\n\n"
-
-            sb += "[Topic Overview]\n"
-            for (i, t) in topics.enumerated() {
-                sb += "Topic \(i + 1): \(t.title) (\(hhmm.string(from: t.startTime)) - \(t.endTime.map { hhmm.string(from: $0) } ?? "now"))\n"
-                if let summary = t.summary, !summary.trimmingCharacters(in: .whitespaces).isEmpty {
-                    sb += "  Summary: \(summary)\n"
-                }
+    private func enrichFromStructuredMinutes(_ minutes: StructuredMinutes, topics: [Topic]) {
+        let allActions = topics.flatMap(\.actionItems)
+        for structured in minutes.actionItems {
+            guard let existing = allActions.first(where: {
+                ThemeClassifier.similarity($0.task, structured.task) > 0.5
+            }) else { continue }
+            var changed = false
+            if existing.priority == nil, let p = structured.priority {
+                existing.priority = p; changed = true
             }
-            sb += "\n"
-
-            let allDecisions = topics.flatMap(\.decisions)
-            if !allDecisions.isEmpty {
-                sb += "[All Decisions]\n"
-                for d in allDecisions { sb += "- \(d.decisionText)\n" }
-                sb += "\n"
+            if existing.sourceSpeaker == nil, let s = structured.sourceSpeaker {
+                existing.sourceSpeaker = s; changed = true
             }
-
-            let allActions = topics.flatMap(\.actionItems)
-            if !allActions.isEmpty {
-                sb += "[All Action Items]\n"
-                for a in allActions {
-                    sb += "- \(a.assignedTo): \(a.task)" + (a.deadline.map { " (\($0))" } ?? "") + "\n"
-                }
-                sb += "\n"
+            if (existing.deadline?.isEmpty ?? true), let d = structured.deadline, !d.isEmpty {
+                existing.deadline = d; changed = true
             }
-
-            let relevantShots = screenshots.filter { $0.meetingRelevance == "high" || $0.meetingRelevance == "medium" }
-            if !relevantShots.isEmpty {
-                sb += "[Screen Content Analysis] (key screenshots during the meeting)\n"
-                var charCount = 0
-                for s in relevantShots {
-                    var line = "[\(hhmmss.string(from: s.timestamp))] type: \(s.contentType ?? "unknown") | content: \(s.aiSummary ?? "")"
-                    if let ocr = s.ocrText, !ocr.trimmingCharacters(in: .whitespaces).isEmpty {
-                        line += " | key text: \(ocr)"
-                    }
-                    if let entities = s.keyEntities, !entities.isEmpty {
-                        line += " | key entities: \(entities)"
-                    }
-                    if let numbers = s.keyNumbers, !numbers.isEmpty {
-                        line += " | key numbers: \(numbers)"
-                    }
-                    if charCount + line.count > 4000 { break }
-                    sb += line + "\n"
-                    charCount += line.count + 1
-                }
-                sb += "\n"
-            }
-
-            sb += "Generate a complete meeting summary and return JSON in this format:\n"
-            sb += "{\n"
-            sb += "  \"summary\": \"A 3-5 sentence overall summary covering the meeting's goals, discussion points, and key outcomes\",\n"
-            sb += "  \"key_highlights\": [\"highlight 1\", \"highlight 2\", \"highlight 3\"],\n"
-            sb += "  \"next_steps\": [\"suggested follow-up 1\", \"suggested follow-up 2\"]\n"
-            sb += "}\n"
-            sb += "Return JSON only, no Markdown.\n"
-            return sb
+            if changed { DataStore.shared.update(existing) }
         }
-
-        sb += "你是会议纪要助手。请根据以下完整的会议数据生成一份结构化的会议总结。\n\n"
-        sb += "会议标题：\(session.title ?? "未命名")\n"
-        sb += "会议时间：\(fullFormatter.string(from: session.startTime)) 至 \(session.endTime.map { fullFormatter.string(from: $0) } ?? "进行中")\n"
-        sb += "会议时长：\(duration)\n\n"
-
-        sb += "【议题概览】\n"
-        for (i, t) in topics.enumerated() {
-            sb += "议题\(i + 1)：\(t.title)（\(hhmm.string(from: t.startTime)) - \(t.endTime.map { hhmm.string(from: $0) } ?? "至今")）\n"
-            if let summary = t.summary, !summary.trimmingCharacters(in: .whitespaces).isEmpty {
-                sb += "  摘要：\(summary)\n"
-            }
-        }
-        sb += "\n"
 
         let allDecisions = topics.flatMap(\.decisions)
-        if !allDecisions.isEmpty {
-            sb += "【所有决策】\n"
-            for d in allDecisions { sb += "- \(d.decisionText)\n" }
-            sb += "\n"
+        for structured in minutes.decisions {
+            guard let existing = allDecisions.first(where: {
+                ThemeClassifier.similarity($0.decisionText, structured.text) > 0.5
+            }), existing.sourceSpeaker == nil, let speaker = structured.sourceSpeaker else { continue }
+            existing.sourceSpeaker = speaker
+            DataStore.shared.update(existing)
         }
-
-        let allActions = topics.flatMap(\.actionItems)
-        if !allActions.isEmpty {
-            sb += "【所有行动项】\n"
-            for a in allActions {
-                sb += "- \(a.assignedTo)：\(a.task)" + (a.deadline.map { "（\($0)）" } ?? "") + "\n"
-            }
-            sb += "\n"
-        }
-
-        let relevantShots = screenshots.filter { $0.meetingRelevance == "high" || $0.meetingRelevance == "medium" }
-        if !relevantShots.isEmpty {
-            sb += "【屏幕内容分析】（会议期间关键截图）\n"
-            var charCount = 0
-            for s in relevantShots {
-                var line = "[\(hhmmss.string(from: s.timestamp))] 类型：\(s.contentType ?? "未知") | 内容：\(s.aiSummary ?? "")"
-                if let ocr = s.ocrText, !ocr.trimmingCharacters(in: .whitespaces).isEmpty {
-                    line += " | 关键文字：\(ocr)"
-                }
-                if let entities = s.keyEntities, !entities.isEmpty {
-                    line += " | 关键实体：\(entities)"
-                }
-                if let numbers = s.keyNumbers, !numbers.isEmpty {
-                    line += " | 关键数据：\(numbers)"
-                }
-                if charCount + line.count > 4000 { break }
-                sb += line + "\n"
-                charCount += line.count + 1
-            }
-            sb += "\n"
-        }
-
-        sb += "请生成一份完整的会议总结，用JSON格式返回：\n"
-        sb += "{\n"
-        sb += "  \"summary\": \"3-5句话的整体会议概述，涵盖会议目标、讨论要点、核心成果\",\n"
-        sb += "  \"key_highlights\": [\"要点1\", \"要点2\", \"要点3\"],\n"
-        sb += "  \"next_steps\": [\"后续行动建议1\", \"后续行动建议2\"]\n"
-        sb += "}\n"
-        sb += "只返回JSON，不要Markdown标记。\n"
-        return sb
     }
 
     /// Resolves anonymous/ambiguous speaker labels (发言人N, 对方) to real names

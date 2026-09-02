@@ -31,13 +31,36 @@ public struct TranscriptItem: Sendable, Identifiable {
 
 public struct ActionItemDisplay: Sendable, Identifiable {
     public let id = UUID()
+    public let dbId: Int64
     public let assignedTo: String
     public let task: String
     public let deadline: String?
+    public let priority: String?
+    public let status: ActionItemStatus
+    public let sourceSpeaker: String?
+    public let timestamp: Date
 
     public var label: String {
         guard let deadline, !deadline.isEmpty else { return tr("\(assignedTo)：\(task)", "\(assignedTo): \(task)") }
         return tr("\(assignedTo)：\(task)（\(deadline)）", "\(assignedTo): \(task) (\(deadline))")
+    }
+
+    public var statusLabel: String {
+        let item = ActionItem(timestamp: timestamp, assignedTo: assignedTo, task: task, deadline: deadline)
+        item.statusRaw = status.rawValue
+        return MinutesRenderer.statusLabel(item)
+    }
+}
+
+public struct DecisionDisplay: Sendable, Identifiable {
+    public let id = UUID()
+    public let text: String
+    public let timestamp: Date
+    public let sourceSpeaker: String?
+
+    public var sourceLabel: String? {
+        guard let speaker = sourceSpeaker, !speaker.isEmpty else { return nil }
+        return "[\(HistoryFormatters.timeLabel.string(from: timestamp))] \(speaker)"
     }
 }
 
@@ -105,10 +128,19 @@ public final class SessionItem: Identifiable {
     public var topicSummaries: [String] = []
     public var transcripts: [TranscriptItem] = []
     public var screenshotPaths: [ScreenshotItem]
-    public var decisions: [String] = []
+    public var decisions: [DecisionDisplay] = []
     public var actionItems: [ActionItemDisplay] = []
+    public var templateId: String?
+    public var meetingType: String?
+    public var qualityScore: Int?
+    public var qualityIssues: String?
+    public var themeId: Int64?
+    public var themeName: String?
 
     public var id: Int64 { sessionId }
+
+    public var templateName: String? { MinutesTemplateLibrary.displayName(for: templateId) }
+    public var meetingTypeName: String? { meetingType.map { TemplateRecommender.meetingTypeName($0) } }
 
     public var dateLabel: String {
         HistoryFormatters.dateLabel.string(from: startTime)
@@ -136,7 +168,9 @@ public final class SessionItem: Identifiable {
 
     public init(sessionId: Int64, title: String, startTime: Date, endTime: Date?,
                 overallSummary: String?, transcriptCount: Int, screenshotCount: Int,
-                topicTitles: [String], screenshotPaths: [ScreenshotItem]) {
+                topicTitles: [String], screenshotPaths: [ScreenshotItem],
+                templateId: String? = nil, meetingType: String? = nil,
+                qualityScore: Int? = nil, themeId: Int64? = nil) {
         self.sessionId = sessionId
         self.title = title
         self.startTime = startTime
@@ -146,6 +180,54 @@ public final class SessionItem: Identifiable {
         self.screenshotCount = screenshotCount
         self.topicTitles = topicTitles
         self.screenshotPaths = screenshotPaths
+        self.templateId = templateId
+        self.meetingType = meetingType
+        self.qualityScore = qualityScore
+        self.themeId = themeId
+    }
+}
+
+public struct ThemeItem: Identifiable, Sendable {
+    public let id: Int64
+    public let name: String
+    public let keywords: [String]
+    public let archived: Bool
+    public var meetingCount: Int = 0
+    public var openActionCount: Int = 0
+    public var latestMeetingDate: Date?
+}
+
+public struct ThemeMeetingEntry: Identifiable, Sendable {
+    public let id: Int64
+    public let title: String
+    public let startTime: Date
+    public let decisionsCount: Int
+    public let actionsCount: Int
+}
+
+public struct ThemeDetail: Sendable {
+    public var meetings: [ThemeMeetingEntry] = []
+    public var totalDecisions: Int = 0
+    public var trackedActions: [TrackedActionDisplay] = []
+}
+
+public struct TrackedActionDisplay: Identifiable, Sendable {
+    public let id = UUID()
+    public let dbId: Int64
+    public let task: String
+    public let owner: String
+    public let deadline: String?
+    public let priority: String?
+    public let status: ActionItemStatus
+    public let isOverdue: Bool
+    public let mentionCount: Int
+    public let sourceMeetingTitle: String
+    public let sourceMeetingDate: Date
+
+    public var statusLabel: String {
+        let item = ActionItem(timestamp: sourceMeetingDate, assignedTo: owner, task: task, deadline: deadline)
+        item.statusRaw = status.rawValue
+        return MinutesRenderer.statusLabel(item)
     }
 }
 
@@ -188,12 +270,16 @@ private struct SessionSnapshot: Sendable {
     let screenshotCount: Int
     let topicTitles: [String]
     let screenshots: [ShotSnapshot]
+    let templateId: String?
+    let meetingType: String?
+    let qualityScore: Int?
+    let themeId: Int64?
 }
 
 private struct DetailSnapshot: Sendable {
     let topicSummaries: [String]
     let transcripts: [TranscriptItem]
-    let decisions: [String]
+    let decisions: [DecisionDisplay]
     let actionItems: [ActionItemDisplay]
     let screenshots: [ShotSnapshot]
     let summary: String?
@@ -205,10 +291,25 @@ public final class HistoryViewModel {
     public private(set) var allSessions: [SessionItem] = []
     public private(set) var selectedSession: SessionItem?
     public var searchText = ""
+    public var mode: Mode = .meetings
+    public private(set) var themes: [ThemeItem] = []
+    public private(set) var selectedThemeId: Int64?
+    public private(set) var themeDetail: ThemeDetail?
+    public private(set) var isLoadingThemeDetail = false
     public private(set) var statusText = tr("加载历史会议...", "Loading meeting history...")
     public private(set) var isLoading = true
     public private(set) var isLoadingDetail = false
     public private(set) var loadedIds: Set<Int64> = []
+
+    public enum Mode: String, CaseIterable {
+        case meetings, themes
+        public var label: String {
+            switch self {
+            case .meetings: return tr("会议", "Meetings")
+            case .themes: return tr("主题", "Themes")
+            }
+        }
+    }
 
     public var hasSelected: Bool { selectedSession != nil }
     public var filteredCount: Int { sessions.count }
@@ -222,6 +323,7 @@ public final class HistoryViewModel {
     public func refresh() {
         selectedSession = nil
         loadList()
+        loadThemes()
     }
 
     private func loadList() {
@@ -242,8 +344,9 @@ public final class HistoryViewModel {
     }
 
     private func applyList(_ snaps: [SessionSnapshot]) {
+        let themeNames = Dictionary(uniqueKeysWithValues: DataStore.shared.fetchThemes().map { ($0.id, $0.name) })
         allSessions = snaps.map { s in
-            SessionItem(
+            let item = SessionItem(
                 sessionId: s.id,
                 title: s.title,
                 startTime: s.startTime,
@@ -256,7 +359,13 @@ public final class HistoryViewModel {
                     ScreenshotItem(filePath: $0.filePath, timestamp: $0.timestamp,
                                    aiSummary: $0.aiSummary, analysisStatus: $0.analysisStatus,
                                    activeSpeakerName: $0.activeSpeakerName)
-                })
+                },
+                templateId: s.templateId,
+                meetingType: s.meetingType,
+                qualityScore: s.qualityScore,
+                themeId: s.themeId)
+            item.themeName = s.themeId.flatMap { themeNames[$0] }
+            return item
         }
         applyFilter()
     }
@@ -347,14 +456,193 @@ public final class HistoryViewModel {
         statusText = tr("已删除", "Deleted")
     }
 
-    public func exportMarkdown() {
-        guard let selected = selectedSession else { return }
-        Task { await exportMarkdownAsync(selected) }
+    // MARK: - Themes
+
+    public func loadThemes() {
+        Task {
+            let items = await Task.detached(priority: .userInitiated) { () -> [ThemeItem] in
+                let store = DataStore.shared
+                return store.fetchThemes().map { theme in
+                    var item = ThemeItem(id: theme.id, name: theme.name, keywords: theme.keywords, archived: theme.archived)
+                    let sessions = store.fetchSessions(themeId: theme.id)
+                    item.meetingCount = sessions.count
+                    item.latestMeetingDate = sessions.first?.startTime
+                    var open = 0
+                    for s in sessions {
+                        for t in store.fetchTopics(sessionId: s.id) {
+                            for a in store.fetchActionItems(topicId: t.id) where a.status != .complete {
+                                open += 1
+                            }
+                        }
+                    }
+                    item.openActionCount = open
+                    return item
+                }
+            }.value
+            themes = items
+        }
     }
 
-    public func exportHtml() {
+    public func selectTheme(_ id: Int64?) {
+        selectedThemeId = id
+        themeDetail = nil
+        guard let id else { return }
+        isLoadingThemeDetail = true
+        Task {
+            let detail = await Task.detached(priority: .userInitiated) { () -> ThemeDetail? in
+                let store = DataStore.shared
+                let sessions = store.fetchSessions(themeId: id).sorted { $0.startTime < $1.startTime }
+                var d = ThemeDetail()
+                var allActions: [ActionItem] = []
+                var actionMeeting: [Int64: (title: String, date: Date)] = [:]
+                for s in sessions {
+                    let topics = store.fetchTopics(sessionId: s.id)
+                    var dc = 0
+                    var ac = 0
+                    for t in topics {
+                        dc += store.fetchDecisions(topicId: t.id).count
+                        let acts = store.fetchActionItems(topicId: t.id)
+                        ac += acts.count
+                        allActions.append(contentsOf: acts)
+                        for a in acts { actionMeeting[a.id] = (s.title ?? "", s.startTime) }
+                    }
+                    d.meetings.append(ThemeMeetingEntry(id: s.id, title: s.title ?? "", startTime: s.startTime, decisionsCount: dc, actionsCount: ac))
+                    d.totalDecisions += dc
+                }
+                let tracked = CrossMeetingActionTracker.group(allActions)
+                d.trackedActions = tracked.map { g in
+                    let rep = g.representative
+                    let src = actionMeeting[rep.id] ?? ("", rep.timestamp)
+                    return TrackedActionDisplay(dbId: rep.id, task: rep.task, owner: rep.assignedTo,
+                                                deadline: rep.deadline, priority: rep.priority,
+                                                status: rep.status, isOverdue: rep.isOverdue,
+                                                mentionCount: g.mentionCount,
+                                                sourceMeetingTitle: src.title, sourceMeetingDate: src.date)
+                }
+                return d
+            }.value
+            guard selectedThemeId == id else { return }
+            themeDetail = detail
+            isLoadingThemeDetail = false
+        }
+    }
+
+    public func cycleActionStatus(dbId: Int64, current: ActionItemStatus) {
+        let next: ActionItemStatus
+        switch current {
+        case .notStarted: next = .inProgress
+        case .inProgress: next = .complete
+        case .complete: next = .notStarted
+        }
+        DataStore.shared.updateActionItemStatus(id: dbId, status: next)
+        if let id = selectedThemeId { selectTheme(id) }
+        if let sid = selectedSession?.sessionId { loadedIds.remove(sid); loadDetail(sid) }
+    }
+
+    public func renameTheme(_ id: Int64, to name: String) {
+        guard let theme = DataStore.shared.fetchTheme(id: id), !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        theme.name = name.trimmingCharacters(in: .whitespaces)
+        DataStore.shared.update(theme)
+        loadThemes()
+    }
+
+    public func setThemeArchived(_ id: Int64, archived: Bool) {
+        guard let theme = DataStore.shared.fetchTheme(id: id) else { return }
+        theme.archived = archived
+        DataStore.shared.update(theme)
+        if archived, selectedThemeId == id { selectTheme(nil) }
+        loadThemes()
+    }
+
+    public func mergeTheme(sourceId: Int64, into targetId: Int64) {
+        guard sourceId != targetId else { return }
+        DataStore.shared.mergeThemes(from: sourceId, into: targetId)
+        selectTheme(selectedThemeId == sourceId ? targetId : selectedThemeId)
+        loadThemes()
+        refresh()
+    }
+
+    public func assignSessionToTheme(sessionId: Int64, themeId: Int64?) {
+        DataStore.shared.assignSessionTheme(sessionId: sessionId, themeId: themeId)
+        if let item = allSessions.first(where: { $0.sessionId == sessionId }) {
+            item.themeId = themeId
+            item.themeName = themeId.flatMap { DataStore.shared.fetchTheme(id: $0)?.name }
+        }
+        loadThemes()
+    }
+
+    // MARK: - Minutes regeneration
+
+    public private(set) var isRegenerating = false
+
+    public func regenerateMinutes(templateId: String) {
         guard let selected = selectedSession else { return }
-        Task { await exportHtmlAsync(selected) }
+        isRegenerating = true
+        statusText = tr("正在按新模板重新生成纪要...", "Regenerating minutes with new template...")
+        let llm = AppServices.shared.llm
+        Task {
+            await Task.detached(priority: .userInitiated) { () -> Void in
+                let store = DataStore.shared
+                guard let session = store.fetchDetail(sessionId: selected.sessionId) else { return }
+                let topics = session.topics.sorted { $0.orderIndex < $1.orderIndex }
+                let screenshots = session.screenshots
+                    .filter { $0.analysisStatus == "ready" }
+                    .sorted { $0.timestamp < $1.timestamp }
+                let features = MeetingFeatureExtractor.extract(session: session)
+                let template = MinutesTemplateLibrary.byId(templateId)
+                session.templateId = template.id
+                session.meetingType = features.predictedType
+                let hhmm = DateFormatter(); hhmm.dateFormat = "HH:mm"
+                let hhmmss = DateFormatter(); hhmmss.dateFormat = "HH:mm:ss"
+                let prompt = MinutesPromptBuilder.build(template: template, features: features,
+                                                        session: session, topics: topics,
+                                                        screenshots: screenshots,
+                                                        hhmm: hhmm, hhmmss: hhmmss)
+                if let response = try? await llm.analyze(prompt) {
+                    let minutes = StructuredMinutes.parseLlmResponse(response)
+                    if !minutes.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        session.summary = minutes.summary
+                    }
+                    session.minutesJson = minutes.encoded()
+                    let quality = MinutesQualityAssessor.assess(minutes: minutes, topics: topics, template: template)
+                    session.qualityScore = quality.score
+                    session.qualityIssues = quality.issues.isEmpty ? nil : quality.issues.joined(separator: "\n")
+                }
+                store.update(session)
+            }.value
+            let sid = selected.sessionId
+            loadedIds.remove(sid)
+            if let snap = await Self.fetchDetail(id: sid) {
+                applyDetail(snap, to: sid)
+            }
+            if let fresh = await Self.fetchSessionList().first(where: { $0.id == sid }) {
+                selected.templateId = fresh.templateId
+                selected.meetingType = fresh.meetingType
+                selected.qualityScore = fresh.qualityScore
+            }
+            isRegenerating = false
+            statusText = tr("已重新生成", "Regenerated")
+        }
+    }
+
+    public func exportMinutesMarkdown() {
+        guard let selected = selectedSession else { return }
+        Task { await exportDoc(selected, kind: .minutes, format: "md") }
+    }
+
+    public func exportMinutesHtml() {
+        guard let selected = selectedSession else { return }
+        Task { await exportDoc(selected, kind: .minutes, format: "html") }
+    }
+
+    public func exportRecordMarkdown() {
+        guard let selected = selectedSession else { return }
+        Task { await exportDoc(selected, kind: .record, format: "md") }
+    }
+
+    public func exportRecordHtml() {
+        guard let selected = selectedSession else { return }
+        Task { await exportDoc(selected, kind: .record, format: "html") }
     }
 
     public func exportText() {
@@ -362,31 +650,38 @@ public final class HistoryViewModel {
         Task { await exportTextAsync(selected) }
     }
 
-    private func exportMarkdownAsync(_ session: SessionItem) async {
+    private func exportDoc(_ session: SessionItem, kind: MinutesRenderer.DocKind, format: String) async {
         await ensureDetailLoaded(session)
-        let defaultName = "MeetingMinutes_\(HistoryFormatters.fileStamp.string(from: session.startTime)).md"
-        guard let url = askSavePath(defaultName: defaultName, ext: "md") else { return }
-        do {
-            let exportDir = url.deletingLastPathComponent().path
-            let mdFileName = url.deletingPathExtension().lastPathComponent
-            let assetDir = (exportDir as NSString).appendingPathComponent("\(mdFileName)_files")
-            let assetRel = "\(mdFileName)_files"
-            let copiedMap = await Self.copyScreenshotsForExport(session, assetDir: assetDir)
-            let md = Self.buildMarkdown(session, assetRelDir: assetRel, screenshotMap: copiedMap)
-            try md.write(to: url, atomically: true, encoding: .utf8)
-            statusText = tr("已导出：\(url.lastPathComponent)", "Exported: \(url.lastPathComponent)")
-        } catch {
-            statusText = tr("导出失败：\(error.localizedDescription)", "Export failed: \(error.localizedDescription)")
-        }
-    }
+        guard let detail = await Task.detached(priority: .userInitiated) { () -> MeetingSession? in
+            DataStore.shared.fetchDetail(sessionId: session.sessionId)
+        }.value else { return }
 
-    private func exportHtmlAsync(_ session: SessionItem) async {
-        await ensureDetailLoaded(session)
-        let defaultName = "MeetingMinutes_\(HistoryFormatters.fileStamp.string(from: session.startTime)).html"
-        guard let url = askSavePath(defaultName: defaultName, ext: "html") else { return }
+        let isMinutes = kind == .minutes
+        let prefix = isMinutes ? "MeetingMinutes" : "MeetingRecord"
+        let defaultName = "\(prefix)_\(HistoryFormatters.fileStamp.string(from: session.startTime)).\(format)"
+        guard let url = askSavePath(defaultName: defaultName, ext: format) else { return }
         do {
-            let html = Self.buildHtml(session)
-            try html.write(to: url, atomically: true, encoding: .utf8)
+            let content: String
+            if format == "md" {
+                let exportDir = url.deletingLastPathComponent().path
+                let mdFileName = url.deletingPathExtension().lastPathComponent
+                let assetDir = (exportDir as NSString).appendingPathComponent("\(mdFileName)_files")
+                let copiedMap = await Self.copyScreenshotsForExport(session, assetDir: assetDir)
+                content = isMinutes
+                    ? MinutesRenderer.renderMinutesMarkdown(session: detail,
+                                                            template: MinutesTemplateLibrary.byId(detail.templateId),
+                                                            screenshotMap: copiedMap,
+                                                            assetRelDir: "\(mdFileName)_files")
+                    : MinutesRenderer.renderRecordMarkdown(session: detail,
+                                                           screenshotMap: copiedMap,
+                                                           assetRelDir: "\(mdFileName)_files")
+            } else {
+                content = isMinutes
+                    ? MinutesRenderer.renderMinutesHtml(session: detail,
+                                                        template: MinutesTemplateLibrary.byId(detail.templateId))
+                    : MinutesRenderer.renderRecordHtml(session: detail)
+            }
+            try content.write(to: url, atomically: true, encoding: .utf8)
             statusText = tr("已导出：\(url.lastPathComponent)", "Exported: \(url.lastPathComponent)")
         } catch {
             statusText = tr("导出失败：\(error.localizedDescription)", "Export failed: \(error.localizedDescription)")
@@ -444,21 +739,7 @@ public final class HistoryViewModel {
     }
 
     private nonisolated static func encodeScreenshotAsDataUri(_ filePath: String) -> String? {
-        do {
-            guard FileManager.default.fileExists(atPath: filePath) else { return nil }
-            let data = try Data(contentsOf: URL(fileURLWithPath: filePath))
-            let mime: String
-            switch (filePath as NSString).pathExtension.lowercased() {
-            case "jpg", "jpeg": mime = "image/jpeg"
-            case "png": mime = "image/png"
-            case "bmp": mime = "image/bmp"
-            case "gif": mime = "image/gif"
-            default: mime = "image/jpeg"
-            }
-            return "data:\(mime);base64,\(data.base64EncodedString())"
-        } catch {
-            return nil
-        }
+        MinutesRenderer.encodeScreenshotAsDataUri(filePath)
     }
 
     private nonisolated static func fetchSessionList() async -> [SessionSnapshot] {
@@ -482,7 +763,11 @@ public final class HistoryViewModel {
                     ShotSnapshot(filePath: $0.filePath, timestamp: $0.timestamp,
                                  aiSummary: $0.aiSummary, analysisStatus: $0.analysisStatus,
                                  activeSpeakerName: $0.activeSpeakerName)
-                })
+                },
+                templateId: s.templateId,
+                meetingType: s.meetingType,
+                qualityScore: s.qualityScore,
+                themeId: s.themeId)
         }
     }
 
@@ -497,10 +782,13 @@ public final class HistoryViewModel {
             .map { TranscriptItem(timestamp: $0.timestamp, speaker: $0.speaker, text: $0.text) }
         let decisions = topics
             .flatMap { $0.decisions.sorted { $0.timestamp < $1.timestamp } }
-            .map(\.decisionText)
+            .map { DecisionDisplay(text: $0.decisionText, timestamp: $0.timestamp, sourceSpeaker: $0.sourceSpeaker) }
         let actionItems = topics
             .flatMap { $0.actionItems.sorted { $0.timestamp < $1.timestamp } }
-            .map { ActionItemDisplay(assignedTo: $0.assignedTo, task: $0.task, deadline: $0.deadline) }
+            .map { ActionItemDisplay(dbId: $0.id, assignedTo: $0.assignedTo, task: $0.task,
+                                     deadline: $0.deadline, priority: $0.priority,
+                                     status: $0.status, sourceSpeaker: $0.sourceSpeaker,
+                                     timestamp: $0.timestamp) }
         let screenshots = session.screenshots.sorted { $0.timestamp < $1.timestamp }.map {
             ShotSnapshot(filePath: $0.filePath, timestamp: $0.timestamp,
                          aiSummary: $0.aiSummary, analysisStatus: $0.analysisStatus,
@@ -530,254 +818,9 @@ public final class HistoryViewModel {
         return lines.joined(separator: "\n") + "\n"
     }
 
-    private static func escapeMarkdown(_ text: String) -> String {
-        text.replacingOccurrences(of: "|", with: "\\|")
-    }
 
-    private static func buildMarkdown(_ s: SessionItem, assetRelDir: String,
-                                                  screenshotMap: [String: String]) -> String {
-        var lines: [String] = []
-        lines.append(tr("# 会议纪要 — \(s.title)", "# Meeting Minutes — \(s.title)"))
-        lines.append("")
-        lines.append(tr("**日期：** \(HistoryFormatters.exportDate.string(from: s.startTime))  ", "**Date:** \(HistoryFormatters.exportDate.string(from: s.startTime))  "))
-        lines.append(tr("**时长：** \(s.durationLabel)  ", "**Duration:** \(s.durationLabel)  "))
-        lines.append(tr("**转录条数：** \(s.transcriptCount)  ", "**Transcripts:** \(s.transcriptCount)  "))
-        if !s.screenshotPaths.isEmpty {
-            lines.append(tr("**截图数：** \(s.screenshotPaths.count)", "**Screenshots:** \(s.screenshotPaths.count)"))
-        }
-        lines.append("")
 
-        if let summary = s.overallSummary, !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            lines.append(tr("## 会议总结", "## Summary"))
-            lines.append("")
-            lines.append("\(escapeMarkdown(summary))  ")
-            lines.append("")
-        }
 
-        let summaryTexts = s.topicSummaries.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        if !summaryTexts.isEmpty {
-            lines.append(tr("## 议题摘要", "## Topic Summaries"))
-            lines.append("")
-            for t in summaryTexts {
-                lines.append("\(escapeMarkdown(t))  ")
-                lines.append("")
-            }
-        }
-
-        if !s.topicTitles.isEmpty {
-            lines.append(tr("## 议题", "## Topics"))
-            for (i, title) in s.topicTitles.enumerated() {
-                lines.append("- **\(title)**")
-                if i < s.topicSummaries.count,
-                   !s.topicSummaries[i].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    lines.append("  \(escapeMarkdown(s.topicSummaries[i]))")
-                }
-            }
-            lines.append("")
-        }
-
-        if s.hasDecisions {
-            lines.append(tr("## 决策", "## Decisions"))
-            for d in s.decisions {
-                lines.append("- \(escapeMarkdown(d))")
-            }
-            lines.append("")
-        }
-
-        if s.hasActionItems {
-            lines.append(tr("## 行动项", "## Action Items"))
-            lines.append(tr("| 负责人 | 任务 | 截止时间 |", "| Owner | Task | Deadline |"))
-            lines.append("|--------|------|----------|")
-            for a in s.actionItems {
-                lines.append("| \(escapeMarkdown(a.assignedTo)) | \(escapeMarkdown(a.task)) | \(escapeMarkdown(a.deadline ?? "—")) |")
-            }
-            lines.append("")
-        }
-
-        if s.hasTranscripts || s.hasScreenshots {
-            lines.append(tr("## 会议记录", "## Meeting Log"))
-            lines.append("")
-
-            var ti = 0
-            var si = 0
-            while ti < s.transcripts.count || si < s.screenshotPaths.count {
-                let haveTranscript = ti < s.transcripts.count
-                let haveScreenshot = si < s.screenshotPaths.count
-
-                if !haveScreenshot || (haveTranscript &&
-                    s.transcripts[ti].timestamp <= s.screenshotPaths[si].timestamp) {
-                    let tr = s.transcripts[ti]
-                    ti += 1
-                    let speaker = (tr.speaker?.isEmpty ?? true) ? "" : "**\(tr.speaker!)**: "
-                    let text = tr.text
-                        .replacingOccurrences(of: "\r\n", with: "  \n")
-                        .replacingOccurrences(of: "\n", with: " ")
-                        .replacingOccurrences(of: "\r", with: " ")
-                    lines.append("**\(tr.timeLabel)** \(speaker)\(text)  ")
-                    lines.append("")
-                } else {
-                    let shot = s.screenshotPaths[si]
-                    si += 1
-                    if let relPath = screenshotMap[shot.filePath] {
-                        lines.append("![\(tr("\(shot.timeLabel) 截图", "\(shot.timeLabel) Screenshot"))](\(assetRelDir)/\(relPath))  ")
-                        let speakerNote = (shot.activeSpeakerName?.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
-                            ? "" : tr(" — 发言人：\(shot.activeSpeakerName!)", " — Speaker: \(shot.activeSpeakerName!)")
-                        lines.append("*\(tr("\(shot.timeLabel) 截图", "\(shot.timeLabel) Screenshot"))\(speakerNote)*  ")
-                        if let ai = shot.aiSummary, !ai.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            lines.append("> \(escapeMarkdown(ai))  ")
-                        }
-                    } else {
-                        let speakerNote = (shot.activeSpeakerName?.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
-                            ? "" : tr(" — 发言人：\(shot.activeSpeakerName!)", " — Speaker: \(shot.activeSpeakerName!)")
-                        lines.append("> 📷 *\(tr("\(shot.timeLabel) 截图（文件缺失）", "\(shot.timeLabel) Screenshot (file missing)"))\(speakerNote)*  ")
-                        if let ai = shot.aiSummary, !ai.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            lines.append("> \(escapeMarkdown(ai))  ")
-                        }
-                    }
-                    lines.append("")
-                }
-            }
-        }
-
-        lines.append("---")
-        lines.append("*\(tr("由 CalledMe 生成", "Generated by CalledMe")) — \(HistoryFormatters.footer.string(from: Date()))*")
-        return lines.joined(separator: "\n") + "\n"
-    }
-
-    private static func buildHtml(_ s: SessionItem) -> String {
-        var lines: [String] = []
-        lines.append("<!DOCTYPE html>")
-        lines.append("<html lang=\"\(tr("zh-CN", "en"))\">")
-        lines.append("<head>")
-        lines.append("<meta charset=\"UTF-8\">")
-        lines.append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">")
-        lines.append("<title>\(tr("会议纪要 — ", "Meeting Minutes — "))\(escapeHtml(s.title))</title>")
-        lines.append("<style>")
-        lines.append("  body { font-family: -apple-system, 'Microsoft YaHei', sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; line-height: 1.7; }")
-        lines.append("  h1 { border-bottom: 2px solid #2563eb; padding-bottom: 12px; }")
-        lines.append("  h2 { color: #2563eb; margin-top: 32px; }")
-        lines.append("  .meta { color: #6b7280; font-size: 14px; }")
-        lines.append("  .meta span { margin-right: 24px; }")
-        lines.append("  .transcript-entry { margin: 8px 0; padding: 6px 0; }")
-        lines.append("  .ts { color: #6b7280; font-size: 13px; font-weight: 600; }")
-        lines.append("  .speaker { color: #2563eb; font-weight: 600; }")
-        lines.append("  .screenshot-block { margin: 16px 0; }")
-        lines.append("  .screenshot-block img { max-width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }")
-        lines.append("  .screenshot-label { color: #9ca3af; font-size: 12px; margin-top: 4px; }")
-        lines.append("  table { border-collapse: collapse; width: 100%; }")
-        lines.append("  th, td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; }")
-        lines.append("  th { background: #f3f4f6; font-weight: 600; }")
-        lines.append("  ul { padding-left: 20px; }")
-        lines.append("  li { margin: 4px 0; }")
-        lines.append("  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 13px; }")
-        lines.append("</style>")
-        lines.append("</head>")
-        lines.append("<body>")
-
-        lines.append("<h1>\(tr("会议纪要 — ", "Meeting Minutes — "))\(escapeHtml(s.title))</h1>")
-        lines.append("<p class=\"meta\">")
-        lines.append("<span>\(tr("日期：", "Date: "))\(HistoryFormatters.exportDate.string(from: s.startTime))</span>")
-        lines.append("<span>\(tr("时长：", "Duration: "))\(s.durationLabel)</span>")
-        lines.append("<span>\(tr("转录条数：", "Transcripts: "))\(s.transcriptCount)</span>")
-        if !s.screenshotPaths.isEmpty {
-            lines.append("<span>\(tr("截图数：", "Screenshots: "))\(s.screenshotPaths.count)</span>")
-        }
-        lines.append("</p>")
-
-        if let summary = s.overallSummary, !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            lines.append("<h2>\(tr("会议总结", "Summary"))</h2>")
-            lines.append("<p>\(escapeHtml(summary))</p>")
-        }
-
-        let summaryTexts = s.topicSummaries.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        if !summaryTexts.isEmpty {
-            lines.append("<h2>\(tr("议题摘要", "Topic Summaries"))</h2>")
-            for t in summaryTexts {
-                lines.append("<p>\(escapeHtml(t))</p>")
-            }
-        }
-
-        if !s.topicTitles.isEmpty {
-            lines.append("<h2>\(tr("议题", "Topics"))</h2><ul>")
-            for (i, title) in s.topicTitles.enumerated() {
-                let summary = (i < s.topicSummaries.count &&
-                               !s.topicSummaries[i].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    ? " — \(escapeHtml(s.topicSummaries[i]))" : ""
-                lines.append("<li><strong>\(escapeHtml(title))</strong>\(summary)</li>")
-            }
-            lines.append("</ul>")
-        }
-
-        if s.hasDecisions {
-            lines.append("<h2>\(tr("决策", "Decisions"))</h2><ul>")
-            for d in s.decisions {
-                lines.append("<li>\(escapeHtml(d))</li>")
-            }
-            lines.append("</ul>")
-        }
-
-        if s.hasActionItems {
-            lines.append("<h2>\(tr("行动项", "Action Items"))</h2>")
-            lines.append("<table><thead><tr><th>\(tr("负责人", "Owner"))</th><th>\(tr("任务", "Task"))</th><th>\(tr("截止时间", "Deadline"))</th></tr></thead><tbody>")
-            for a in s.actionItems {
-                lines.append("<tr><td>\(escapeHtml(a.assignedTo))</td><td>\(escapeHtml(a.task))</td><td>\(escapeHtml(a.deadline ?? "—"))</td></tr>")
-            }
-            lines.append("</tbody></table>")
-        }
-
-        if s.hasTranscripts || s.hasScreenshots {
-            lines.append("<h2>\(tr("会议记录", "Meeting Log"))</h2>")
-
-            var ti = 0
-            var si = 0
-            while ti < s.transcripts.count || si < s.screenshotPaths.count {
-                let haveTranscript = ti < s.transcripts.count
-                let haveScreenshot = si < s.screenshotPaths.count
-
-                if !haveScreenshot || (haveTranscript &&
-                    s.transcripts[ti].timestamp <= s.screenshotPaths[si].timestamp) {
-                    let tr = s.transcripts[ti]
-                    ti += 1
-                    let speaker = (tr.speaker?.isEmpty ?? true)
-                        ? "" : "<span class=\"speaker\">\(escapeHtml(tr.speaker!)):</span>"
-                    lines.append("<div class=\"transcript-entry\"><span class=\"ts\">\(tr.timeLabel)</span> \(speaker)\(escapeHtml(tr.text))</div>")
-                } else {
-                    let shot = s.screenshotPaths[si]
-                    si += 1
-                    if let dataUri = encodeScreenshotAsDataUri(shot.filePath) {
-                        lines.append("<div class=\"screenshot-block\">")
-                        lines.append("<img src=\"\(dataUri)\" alt=\"\(tr("\(shot.timeLabel) 截图", "\(shot.timeLabel) Screenshot"))\" loading=\"lazy\">")
-                        let speakerNote = (shot.activeSpeakerName?.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
-                            ? "" : tr(" — 发言人：", " — Speaker: ") + escapeHtml(shot.activeSpeakerName!)
-                        lines.append("<div class=\"screenshot-label\">\(tr("\(shot.timeLabel) 截图", "\(shot.timeLabel) Screenshot"))\(speakerNote)</div>")
-                        if let ai = shot.aiSummary, !ai.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            lines.append("<p style=\"color:#6b7280;font-size:13px;margin-top:4px\">\(escapeHtml(ai))</p>")
-                        }
-                        lines.append("</div>")
-                    } else {
-                        let speakerNote = (shot.activeSpeakerName?.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
-                            ? "" : tr(" — 发言人：", " — Speaker: ") + escapeHtml(shot.activeSpeakerName!)
-                        lines.append("<div class=\"screenshot-block\"><p>📷 \(tr("\(shot.timeLabel) 截图（文件缺失）", "\(shot.timeLabel) Screenshot (file missing)"))\(speakerNote)</p>")
-                        if let ai = shot.aiSummary, !ai.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            lines.append("<p style=\"color:#6b7280;font-size:13px\">\(escapeHtml(ai))</p>")
-                        }
-                        lines.append("</div>")
-                    }
-                }
-            }
-        }
-
-        lines.append("<footer>\(tr("由 CalledMe 生成", "Generated by CalledMe")) — \(HistoryFormatters.footer.string(from: Date()))</footer>")
-        lines.append("</body></html>")
-        return lines.joined(separator: "\n") + "\n"
-    }
-
-    private nonisolated static func escapeHtml(_ text: String) -> String {
-        text.replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
-    }
 }
 
 extension HistoryFormatters {
