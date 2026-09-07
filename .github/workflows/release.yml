@@ -1,0 +1,23 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build & package DMG
+        run: VERSION="${GITHUB_REF_NAME#v}" ./scripts/package-dmg.sh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/MeetingQ-${{ github.ref_name }}.dmg
+          generate_release_notes: true
