@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_NAME="CalledMe"
-VERSION="${VERSION:-1.1.2}"
+APP_NAME="MeetingQ"
+VERSION="${VERSION:-1.0.0}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_DIR="$ROOT/dist/${APP_NAME}.app"
 DMG_PATH="$ROOT/dist/${APP_NAME}-${VERSION}.dmg"

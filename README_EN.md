@@ -1,8 +1,8 @@
-# CalledMe
+# MeetingQ
 
 [中文](README.md) | **English**
 
-**When someone calls your name in a meeting, CalledMe alerts you right away.** — A native macOS AI meeting assistant: on-device live transcription · instant name call-out alerts · meeting minutes with screenshots · runs fully offline
+**When someone calls your name in a meeting, MeetingQ alerts you right away.** — A native macOS AI meeting assistant: on-device live transcription · instant name call-out alerts · meeting minutes with screenshots · runs fully offline
 
 <p>
   <img alt="macOS" src="https://img.shields.io/badge/macOS-15%2B-black">
@@ -14,11 +14,11 @@
 
 ---
 
-## Why CalledMe
+## Why MeetingQ
 
 Ever been in an online meeting, half-listening while replying to messages, when suddenly someone says your name — "Wei, what do you think of this proposal?" — and you have no idea what was just discussed?
 
-CalledMe is built for exactly that moment:
+MeetingQ is built for exactly that moment:
 
 1. **It's always listening** — system audio is transcribed to text in real time, entirely on your Mac
 2. **It knows who you are** — when someone calls your name (even a homophone misrecognition), a popup alerts you within 0.5 seconds
@@ -97,17 +97,17 @@ On a hit: popup alert (can be pinned) → instant screenshot → shows the origi
 
 ### Option 1: Download the DMG (Recommended)
 
-Download `CalledMe-x.x.x.dmg` from [Releases](../../releases) and drag it into Applications.
+Download `MeetingQ-x.x.x.dmg` from [Releases](../../releases) and drag it into Applications.
 
 > If an unnotarized app is blocked on first launch: right-click the app → **Open** → confirm in the dialog.
 
 ### Option 2: Build from Source
 
 ```bash
-git clone https://github.com/tullyhu/CalledMe.git
-cd CalledMe
+git clone https://github.com/tullyhu/MeetingQ.git
+cd MeetingQ
 
-# Compile and package the .app (outputs dist/CalledMe.app)
+# Compile and package the .app (outputs dist/MeetingQ.app)
 ./scripts/bundle.sh
 
 # Generate a DMG
@@ -125,7 +125,7 @@ VERSION=1.3.0 ./scripts/package-dmg.sh
 5. **Configure an AI model**:
    - Local recommendation: install [oMLX](https://github.com/jundot/omlx) (a local LLM runtime built on Apple's MLX framework, `brew install omlx` or download the DMG), load a **Qwen3.6-series multimodal model** (handles both text summarization and screenshot vision), endpoint `http://localhost:8000/v1`, leave the key empty
    - Cloud example: DeepSeek `https://api.deepseek.com/v1` + your API key
-6. Before a meeting, click **Start Listening** in the floating window — then focus on the meeting (or on slacking off; CalledMe keeps watch for you)
+6. Before a meeting, click **Start Listening** in the floating window — then focus on the meeting (or on slacking off; MeetingQ keeps watch for you)
 
 ## Usage Guide
 
@@ -157,7 +157,7 @@ VERSION=1.3.0 ./scripts/package-dmg.sh
 
 | Content | Location |
 |---------|----------|
-| Database / screenshots | `~/Library/Application Support/CalledMe/` |
+| Database / screenshots | `~/Library/Application Support/MeetingQ/` |
 | API keys | UserDefaults (AES-GCM encrypted with a machine-bound key; legacy Keychain items migrate automatically) |
 | App settings | UserDefaults |
 
@@ -179,17 +179,17 @@ VERSION=1.3.0 ./scripts/package-dmg.sh
 ## Project Structure
 
 ```
-CalledMe/
+MeetingQ/
 ├── Package.swift
 ├── LICENSE
 ├── Resources/
 │   ├── Info.plist                # Bundle config, permission declarations, ATS local network
-│   ├── CalledMe.entitlements     # App Sandbox / network / microphone
+│   ├── MeetingQ.entitlements     # App Sandbox / network / microphone
 │   └── AppIcon.icns
 ├── scripts/
 │   ├── bundle.sh                 # Compile + package .app + sign (entitlements supported)
 │   └── package-dmg.sh            # Generate DMG + optional notarization
-└── Sources/CalledMe/
+└── Sources/MeetingQ/
     ├── App/                      # Entry, startup flow (language → privacy → onboarding → main window)
     ├── Models/                   # Session / topic / transcript / screenshot / decision / action item / theme
     ├── Infrastructure/           # Localization, SQLite, Keychain, pinyin matching, single instance, menu bar
@@ -210,7 +210,7 @@ CalledMe/
 ## FAQ
 
 **Q: Why does it need Screen Recording permission?**
-A: On macOS, capturing "system audio output" (the remote party's voice in a meeting) requires ScreenCaptureKit, which in turn requires Screen Recording permission. Screenshots depend on it too. CalledMe reads no screen or audio data unless you've started listening.
+A: On macOS, capturing "system audio output" (the remote party's voice in a meeting) requires ScreenCaptureKit, which in turn requires Screen Recording permission. Screenshots depend on it too. MeetingQ reads no screen or audio data unless you've started listening.
 
 **Q: Are Intel Macs supported?**
 A: No. Local LLMs and on-device recognition depend on Apple Silicon. macOS 15+ is required: macOS 15–25 uses on-device `SFSpeechRecognizer`, while macOS 26+ uses the new `SpeechAnalyzer` framework.
@@ -221,7 +221,7 @@ A: It depends on Apple's on-device speech model; it performs well on clear Manda
 **Q: Which local model should I choose?**
 A: We recommend a **Qwen3.6-series multimodal model** — one model covers text summarization, topic detection and screenshot vision (charts / OCR / speaker detection). On 32GB+ memory choose a larger variant; on 16GB machines a smaller one works fine. The `qwen3` text-only series also works, but you lose screenshot understanding.
 
-**Q: Does CalledMe save meeting recordings?**
+**Q: Does MeetingQ save meeting recordings?**
 A: No. Audio is only streamed in memory to on-device recognition and discarded after transcription; the app creates no audio/video files. Only text transcripts, summaries and periodic screenshots are kept locally (screenshots can be cleared in Settings).
 
 ## Contributing

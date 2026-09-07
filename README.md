@@ -1,4 +1,4 @@
-# CalledMe
+# MeetingQ
 
 **中文** | [English](README_EN.md)
 
@@ -14,11 +14,11 @@
 
 ---
 
-## 为什么做 CalledMe
+## 为什么做 MeetingQ
 
 开线上会议时你有没有过这种经历：一边"听会"一边回消息，突然听到有人叫你的名字——"张伟，这个方案你怎么看？" 而你完全不知道前面聊了什么。
 
-CalledMe 就是为这一刻而生的：
+MeetingQ 就是为这一刻而生的：
 
 1. **它一直在听** —— 系统音频实时转写成文字，全程在你的 Mac 本地完成
 2. **它认得你** —— 有人叫到你名字（包括同音误读），0.5 秒内弹窗提醒
@@ -97,17 +97,17 @@ CalledMe 就是为这一刻而生的：
 
 ### 方式一：下载 DMG（推荐）
 
-从 [Releases](../../releases) 下载 `CalledMe-x.x.x.dmg`，拖入 Applications 即可。
+从 [Releases](../../releases) 下载 `MeetingQ-x.x.x.dmg`，拖入 Applications 即可。
 
 > 未公证的应用首次打开如遇拦截：右键 App →「打开」→ 在弹窗中确认。
 
 ### 方式二：源码构建
 
 ```bash
-git clone https://github.com/tullyhu/CalledMe.git
-cd CalledMe
+git clone https://github.com/tullyhu/MeetingQ.git
+cd MeetingQ
 
-# 编译并打包 .app（输出 dist/CalledMe.app）
+# 编译并打包 .app（输出 dist/MeetingQ.app）
 ./scripts/bundle.sh
 
 # 生成 DMG
@@ -125,7 +125,7 @@ VERSION=1.3.0 ./scripts/package-dmg.sh
 5. **配置 AI 模型**：
    - 本地推荐：安装 [oMLX](https://github.com/jundot/omlx)（基于 Apple MLX 框架的本地大模型运行时，`brew install omlx` 或下载 DMG），加载 **Qwen3.6 系列多模态模型**（同时胜任文本摘要与截图视觉理解），接口地址 `http://localhost:8000/v1`，Key 留空
    - 云端示例：DeepSeek `https://api.deepseek.com/v1` + 你的 API Key
-6. 开会前点击浮动窗的 **「开始监听」**，然后专心开会（或者专心摸鱼，CalledMe 帮你盯着）
+6. 开会前点击浮动窗的 **「开始监听」**，然后专心开会（或者专心摸鱼，MeetingQ 帮你盯着）
 
 ## 使用指南
 
@@ -157,7 +157,7 @@ VERSION=1.3.0 ./scripts/package-dmg.sh
 
 | 内容 | 位置 |
 |------|------|
-| 数据库 / 截图 | `~/Library/Application Support/CalledMe/` |
+| 数据库 / 截图 | `~/Library/Application Support/MeetingQ/` |
 | API Key | UserDefaults（AES-GCM 机器绑定密钥加密，旧钥匙串数据自动迁移） |
 | 应用配置 | UserDefaults |
 
@@ -179,17 +179,17 @@ VERSION=1.3.0 ./scripts/package-dmg.sh
 ## 项目结构
 
 ```
-CalledMe/
+MeetingQ/
 ├── Package.swift
 ├── LICENSE
 ├── Resources/
 │   ├── Info.plist                # Bundle 配置、权限声明、ATS 本地网络
-│   ├── CalledMe.entitlements     # App Sandbox / 网络 / 麦克风
+│   ├── MeetingQ.entitlements     # App Sandbox / 网络 / 麦克风
 │   └── AppIcon.icns
 ├── scripts/
 │   ├── bundle.sh                 # 编译 + 打包 .app + 签名（支持 entitlements）
 │   └── package-dmg.sh            # 生成 DMG + 可选公证
-└── Sources/CalledMe/
+└── Sources/MeetingQ/
     ├── App/                      # 入口、启动流程（语言选择→隐私→引导→主窗）
     ├── Models/                   # 会话/议题/转写/截图/决策/行动项/主题
     ├── Infrastructure/           # 本地化、SQLite、钥匙串、拼音匹配、单实例、菜单栏
@@ -210,7 +210,7 @@ CalledMe/
 ## FAQ
 
 **Q: 为什么需要屏幕录制权限？**
-A: macOS 采集"系统播放的声音"（即会议对方的声音）必须经由 ScreenCaptureKit，而该 API 要求屏幕录制权限。截图功能同样依赖它。CalledMe 不会在你未开始监听时读取任何屏幕/音频数据。
+A: macOS 采集"系统播放的声音"（即会议对方的声音）必须经由 ScreenCaptureKit，而该 API 要求屏幕录制权限。截图功能同样依赖它。MeetingQ 不会在你未开始监听时读取任何屏幕/音频数据。
 
 **Q: 支持 Intel Mac 吗？**
 A: 不支持。本地大模型与设备端识别依赖 Apple Silicon。运行要求 macOS 15+：macOS 15–25 使用设备端 `SFSpeechRecognizer`，macOS 26+ 使用新的 `SpeechAnalyzer` 框架。
@@ -221,7 +221,7 @@ A: 取决于 Apple 设备端语音模型，中文普通话清晰语音下表现�
 **Q: 本地模型选哪个？**
 A: 推荐 **Qwen3.6 系列多模态大模型**——一个模型同时覆盖文本摘要、议题检测与截图视觉理解（图表/OCR/发言人识别）。32GB+ 内存可选更大的参数量版本，16GB 机型选小参数版本即可。纯文本场景也可用 `qwen3` 文本系列，但会失去截图理解能力。
 
-**Q: CalledMe 会保存会议录音或录像吗？**
+**Q: MeetingQ 会保存会议录音或录像吗？**
 A: 不会。音频只在内存中实时送交设备端识别，转写后即丢弃；应用不生成任何音视频文件。本地仅保存文字转写、摘要与定时截图（截图可在设置中清空）。
 
 ## 贡献

@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_NAME="CalledMe"
-BIN_NAME="CalledMe"
+APP_NAME="MeetingQ"
+BIN_NAME="MeetingQ"
 MODE="${1:-release}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_DIR="$ROOT/dist/${APP_NAME}.app"
@@ -47,8 +47,8 @@ swiftc ${VFS_ARGS[@]+"${VFS_ARGS[@]}"} \
   -sdk "$SDK_PATH" \
   -swift-version 5 \
   ${OPT_FLAGS[@]+"${OPT_FLAGS[@]}"} \
-  -module-name CalledMe \
-  $(find Sources/CalledMe -name '*.swift') \
+  -module-name MeetingQ \
+  $(find Sources/MeetingQ -name '*.swift') \
   -o "$ROOT/dist/$BIN_NAME"
 
 rm -rf "$APP_DIR"
@@ -60,8 +60,8 @@ if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
   /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
 fi
 
-if [ -z "${CODESIGN_IDENTITY:-}" ] && security find-certificate -c "CalledMe Dev" >/dev/null 2>&1; then
-  CODESIGN_IDENTITY="CalledMe Dev"
+if [ -z "${CODESIGN_IDENTITY:-}" ] && security find-certificate -c "MeetingQ Dev" >/dev/null 2>&1; then
+  CODESIGN_IDENTITY="MeetingQ Dev"
 fi
 
 if [ -n "${CODESIGN_IDENTITY:-}" ]; then
@@ -72,12 +72,12 @@ if [ -n "${CODESIGN_IDENTITY:-}" ]; then
     fi
     KEYCHAIN_ARGS=(--keychain "$CODESIGN_KEYCHAIN")
   fi
-  ENTITLEMENTS="$ROOT/Resources/CalledMe.entitlements"
+  ENTITLEMENTS="$ROOT/Resources/MeetingQ.entitlements"
   case "$CODESIGN_IDENTITY" in
     *"Developer ID"*|*"Apple Development"*|*"Distribution"*|*"Mac App Store"*) ;;
     *)
-      ENTITLEMENTS="$WORKAROUND_DIR/CalledMe-nosandbox.entitlements"
-      cp "$ROOT/Resources/CalledMe.entitlements" "$ENTITLEMENTS"
+      ENTITLEMENTS="$WORKAROUND_DIR/MeetingQ-nosandbox.entitlements"
+      cp "$ROOT/Resources/MeetingQ.entitlements" "$ENTITLEMENTS"
       /usr/libexec/PlistBuddy -c "Delete :com.apple.security.app-sandbox" "$ENTITLEMENTS"
       echo "Self-signed identity detected: building without app sandbox (avoids repeated keychain prompts)"
       ;;
