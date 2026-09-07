@@ -19,5 +19,5 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/MeetingQ-${{ github.ref_name }}.dmg
+          files: dist/MeetingQ-*.dmg
           generate_release_notes: true
