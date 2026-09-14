@@ -18,6 +18,7 @@ import Foundation
 
 public enum AppLanguage: String, CaseIterable {
     case zh = "zh"
+    case zhHant = "zh-Hant"
     case en = "en"
 
     public static var current: AppLanguage {
@@ -40,8 +41,31 @@ public enum AppLanguage: String, CaseIterable {
     }
 
     public var isEnglish: Bool { self == .en }
+
+    public var speechLocaleIdentifier: String {
+        switch self {
+        case .zh: return "zh-CN"
+        case .zhHant: return "zh-HK"
+        case .en: return "en-US"
+        }
+    }
+
+    /// True when name matching should also try Cantonese (Jyutping) romanization.
+    public var usesJyutping: Bool { self == .zhHant }
+
+    public var displayName: String {
+        switch self {
+        case .zh: return "简体中文"
+        case .zhHant: return "繁體中文"
+        case .en: return "English"
+        }
+    }
 }
 
-public func tr(_ zh: String, _ en: String) -> String {
-    AppLanguage.current.isEnglish ? en : zh
+public func tr(_ zh: String, _ en: String, zhHant: String? = nil) -> String {
+    switch AppLanguage.current {
+    case .en: return en
+    case .zh: return zh
+    case .zhHant: return zhHant ?? zh
+    }
 }

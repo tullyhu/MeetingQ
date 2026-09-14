@@ -32,10 +32,13 @@ public enum StoreKeys {
     public static let appLanguage = "app_language"
     public static let onboardingDone = "onboarding_done"
     public static let showDockIcon = "show_dock_icon"
+    // iOS-only
+    public static let semanticDetectionEnabled = "semantic_detection_enabled"
 
     public static let all = [
         userName, userNicknames, userAsrVariants, userRole, llmProfiles,
         captureWindowTitle, micEnabled, micDeviceName, privacyAccepted,
         multimodalEnabled, localOcrFallbackEnabled, screenshotAnalysisEngine, appLanguage, onboardingDone, showDockIcon,
+        semanticDetectionEnabled,
     ]
 }

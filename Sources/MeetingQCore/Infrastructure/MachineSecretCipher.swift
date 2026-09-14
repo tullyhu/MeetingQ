@@ -16,11 +16,17 @@
 
 import CryptoKit
 import Foundation
+#if os(iOS)
+import UIKit
+#endif
 
 public enum MachineSecretCipher {
     public static let prefix = "enc1:"
 
     private static func key() -> SymmetricKey {
+        #if os(iOS)
+        let uuidString = UIDevice.current.identifierForVendor?.uuidString ?? "unknown-device"
+        #else
         var uuid: uuid_t = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
         let uuidString: String = withUnsafeMutablePointer(to: &uuid) { ptr in
             gethostuuid(ptr, nil)
@@ -28,6 +34,7 @@ public enum MachineSecretCipher {
                 .map { String(format: "%02x", $0) }
                 .joined()
         }
+        #endif
         let digest = SHA256.hash(data: Data(("CalledMe-secret-v1:" + uuidString).utf8))
         return SymmetricKey(data: Data(digest))
     }

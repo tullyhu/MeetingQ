@@ -46,7 +46,7 @@ public final class DualTrackAsrService: AsrService {
     }
 
     public init() {
-        if #available(macOS 26.0, *) {
+        if #available(macOS 26.0, iOS 26.0, *) {
             systemTrack = SpeechTranscriberService()
             micTrack = SpeechTranscriberService()
         } else {

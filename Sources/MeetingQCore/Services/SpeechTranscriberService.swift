@@ -36,7 +36,7 @@ public enum AsrError: LocalizedError {
     }
 }
 
-@available(macOS 26.0, *)
+@available(macOS 26.0, iOS 26.0, *)
 public final class SpeechTranscriberService: AsrService {
     private static let inputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false)!
 
@@ -79,7 +79,7 @@ public final class SpeechTranscriberService: AsrService {
             throw AsrError.permissionDenied
         }
 
-        let preferredId = AppLanguage.current.isEnglish ? "en-US" : "zh-CN"
+        let preferredId = AppLanguage.current.speechLocaleIdentifier
         let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: preferredId))
             ?? Locale(identifier: preferredId)
         let transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)

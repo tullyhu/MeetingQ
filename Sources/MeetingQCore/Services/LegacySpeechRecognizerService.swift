@@ -52,7 +52,7 @@ public final class LegacySpeechRecognizerService: AsrService {
             throw AsrError.permissionDenied
         }
 
-        let preferredId = AppLanguage.current.isEnglish ? "en-US" : "zh-CN"
+        let preferredId = AppLanguage.current.speechLocaleIdentifier
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: preferredId)) ?? SFSpeechRecognizer(),
               recognizer.isAvailable else {
             throw AsrError.unsupported

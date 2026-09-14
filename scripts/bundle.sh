@@ -48,7 +48,7 @@ swiftc ${VFS_ARGS[@]+"${VFS_ARGS[@]}"} \
   -swift-version 5 \
   ${OPT_FLAGS[@]+"${OPT_FLAGS[@]}"} \
   -module-name MeetingQ \
-  $(find Sources/MeetingQ -name '*.swift') \
+  $(find Sources/MeetingQCore Sources/MeetingQ -name '*.swift') \
   -o "$ROOT/dist/$BIN_NAME"
 
 rm -rf "$APP_DIR"

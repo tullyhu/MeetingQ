@@ -23,14 +23,16 @@ public final class NameDetectionServiceImpl: NameDetectionService {
     private var loadedNames: [String] = []
     private var userRole: String = ""
 
-    private static let questionParticles = ["吗", "呢", "么", "嘛", "啊"]
+    private static let questionParticles = ["吗", "呢", "么", "嘛", "啊", "嗎", "呀", "咩"]
 
     private static let interrogativeWords =
-        ["什么", "怎么", "为什么", "哪里", "哪个", "哪些", "谁", "多少", "几", "如何", "是否"]
+        ["什么", "怎么", "为什么", "哪里", "哪个", "哪些", "谁", "多少", "几", "如何", "是否",
+         "甚麼", "點解", "邊個", "幾多", "點樣", "邊度"]
 
     private static let directedPhrases =
         ["你觉得", "你认为", "你说", "你来", "你有", "你能", "请你", "问你", "想问你",
-         "你的意见", "你的看法", "你怎么看", "你们觉得", "你们认为"]
+         "你的意见", "你的看法", "你怎么看", "你们觉得", "你们认为",
+         "你覺得", "你認為", "你點睇", "你話呢", "交俾你", "你跟進", "你負責", "想問你"]
 
     public init(llm: LlmService) {
         self.llm = llm
@@ -107,6 +109,17 @@ public final class NameDetectionServiceImpl: NameDetectionService {
                 result.isDetected = true
                 result.confidence = 0.75
                 result.matchedName = pinyinMatch
+                result.originalText = text
+                result.detectionLayer = 0
+                return result
+            }
+            if AppLanguage.current.usesJyutping,
+               let jyutpingMatch = JyutpingHelper.findMatch(name: name, in: text), jyutpingMatch != name {
+                autoAddAsrVariant(jyutpingMatch)
+                var result = DetectionResult()
+                result.isDetected = true
+                result.confidence = 0.75
+                result.matchedName = jyutpingMatch
                 result.originalText = text
                 result.detectionLayer = 0
                 return result

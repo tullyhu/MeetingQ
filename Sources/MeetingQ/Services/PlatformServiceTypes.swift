@@ -14,71 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import AVFAudio
+import CoreGraphics
 import Foundation
-
-public struct TranscriptEvent: Sendable {
-    public let text: String
-    public let isFinal: Bool
-    public let confidence: Float
-    public let utteranceId: Int
-    public let speakerLabel: String?
-
-    public init(text: String, isFinal: Bool, confidence: Float, utteranceId: Int = -1, speakerLabel: String? = nil) {
-        self.text = text
-        self.isFinal = isFinal
-        self.confidence = confidence
-        self.utteranceId = utteranceId
-        self.speakerLabel = speakerLabel
-    }
-}
-
-public protocol AsrService: AnyObject {
-    var onTranscript: ((TranscriptEvent) -> Void)? { get set }
-    var onError: ((String) -> Void)? { get set }
-    var isConnected: Bool { get }
-
-    func connect() async throws
-    func sendAudio(_ buffer: AVAudioPCMBuffer) async
-    func finalizeSegment() async throws
-    func disconnect() async
-}
-
-public protocol AudioCaptureService: AnyObject {
-    var onAudioData: ((AVAudioPCMBuffer) -> Void)? { get set }
-    var onAudioLevel: ((Float) -> Void)? { get set }
-    var onSpeechSegmentEnded: (() -> Void)? { get set }
-    var isCapturing: Bool { get }
-    var currentDeviceName: String? { get }
-
-    func start() async throws
-    func stop() async
-    func setAsr(_ asr: AsrService?)
-}
-
-public protocol LlmService: AnyObject {
-    func analyze(_ prompt: String) async throws -> String
-    func summarize(_ transcripts: [Transcript]) async throws -> String
-    func test() async throws -> String
-    func analyzeImage(systemPrompt: String, userMessage: String, imageBase64: String, modelOverride: String?) async throws -> String
-}
-
-public struct DetectionResult: Sendable {
-    public var isDetected: Bool = false
-    public var confidence: Float = 0
-    public var matchedName: String?
-    public var originalText: String?
-    public var extractedQuestions: [String]?
-    public var detectionLayer: Int = 0
-
-    public init() {}
-}
-
-public protocol NameDetectionService: AnyObject {
-    func detect(_ text: String) -> DetectionResult
-    func detectAsync(_ text: String) async -> DetectionResult
-    func reloadNames()
-}
 
 public struct ScreenshotCapturedEvent: Sendable {
     public let filePath: String

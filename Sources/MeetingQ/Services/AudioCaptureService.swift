@@ -40,27 +40,6 @@ public enum CaptureError: LocalizedError {
     }
 }
 
-enum PcmConverter {
-    static func convert(_ converter: AVAudioConverter, input: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
-        let ratio = converter.outputFormat.sampleRate / converter.inputFormat.sampleRate
-        let capacity = AVAudioFrameCount(Double(input.frameLength) * ratio * 1.2) + 1024
-        guard let output = AVAudioPCMBuffer(pcmFormat: converter.outputFormat, frameCapacity: capacity) else { return nil }
-        var consumed = false
-        var error: NSError?
-        let status = converter.convert(to: output, error: &error) { _, statusPtr in
-            if consumed {
-                statusPtr.pointee = .noDataNow
-                return nil
-            }
-            consumed = true
-            statusPtr.pointee = .haveData
-            return input
-        }
-        guard status != .error, output.frameLength > 0 else { return nil }
-        return output
-    }
-}
-
 private final class SystemAudioOutput: NSObject, SCStreamOutput {
     var onAudio: ((CMSampleBuffer) -> Void)?
 
@@ -264,7 +243,7 @@ public final class AudioCaptureServiceImpl: AudioCaptureService {
     }
 
     private func handleSystemAudio(_ sampleBuffer: CMSampleBuffer) {
-        guard isCapturing, let pcm = Self.pcmBuffer(from: sampleBuffer) else { return }
+        guard isCapturing, let pcm = CmsPcmHelper.pcmBuffer(from: sampleBuffer) else { return }
         if sysConverter == nil || sysConverter?.inputFormat != pcm.format {
             sysConverter = AVAudioConverter(from: pcm.format, to: Self.targetFormat)
         }
@@ -387,42 +366,6 @@ public final class AudioCaptureServiceImpl: AudioCaptureService {
             }
         }
         return buffer
-    }
-
-    private static func pcmBuffer(from sampleBuffer: CMSampleBuffer) -> AVAudioPCMBuffer? {
-        guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer),
-              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription),
-              let format = AVAudioFormat(streamDescription: asbd) else { return nil }
-
-        var sizeNeeded = 0
-        var status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
-            sampleBuffer, bufferListSizeNeededOut: &sizeNeeded, bufferListOut: nil,
-            bufferListSize: 0, blockBufferAllocator: nil, blockBufferMemoryAllocator: nil,
-            flags: 0, blockBufferOut: nil)
-        guard status == noErr, sizeNeeded > 0 else { return nil }
-
-        let raw = UnsafeMutableRawPointer.allocate(byteCount: sizeNeeded, alignment: MemoryLayout<AudioBufferList>.alignment)
-        defer { raw.deallocate() }
-        var blockBuffer: CMBlockBuffer?
-        status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
-            sampleBuffer, bufferListSizeNeededOut: nil,
-            bufferListOut: raw.assumingMemoryBound(to: AudioBufferList.self),
-            bufferListSize: sizeNeeded, blockBufferAllocator: nil, blockBufferMemoryAllocator: nil,
-            flags: 0, blockBufferOut: &blockBuffer)
-        guard status == noErr else { return nil }
-
-        let frameCount = AVAudioFrameCount(CMSampleBufferGetNumSamples(sampleBuffer))
-        guard let pcm = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return nil }
-        pcm.frameLength = frameCount
-
-        let srcList = UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self))
-        let dstList = UnsafeMutableAudioBufferListPointer(pcm.mutableAudioBufferList)
-        for i in 0..<min(srcList.count, dstList.count) {
-            if let src = srcList[i].mData, let dst = dstList[i].mData {
-                memcpy(dst, src, Int(min(srcList[i].mDataByteSize, dstList[i].mDataByteSize)))
-            }
-        }
-        return pcm
     }
 
     private func findInputDeviceID(matching name: String) -> AudioDeviceID? {
