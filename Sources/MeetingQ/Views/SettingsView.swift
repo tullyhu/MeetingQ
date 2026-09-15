@@ -143,6 +143,13 @@ public struct SettingsView: View {
                             "When multimodal LLM analysis fails, use macOS on-device OCR to extract text from screenshots. Fully offline."))
                 }
             }
+
+            Section {
+                Link(tr("隐私政策", "Privacy Policy"),
+                     destination: URL(string: "https://meetingq-privacy.tully-hu.workers.dev/macos/")!)
+            } header: {
+                Text(tr("关于", "About"))
+            }
         }
         .formStyle(.grouped)
     }
