@@ -219,7 +219,7 @@ public struct SettingsView: View {
                                     .font(.callout)
                                     .lineLimit(1)
                             }
-                            Text(p.modelId)
+                            Text(p.provider == .apple ? tr("Apple 系统模型", "Apple System Model") : p.modelId)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .padding(.leading, 12)
@@ -406,6 +406,33 @@ private struct ProfileEditForm: View {
         Form {
             Section {
                 TextField(tr("配置名称", "Profile Name"), text: $profile.name)
+                Picker(tr("服务商", "Provider"), selection: $profile.provider) {
+                    Text(tr("OpenAI 兼容接口", "OpenAI Compatible")).tag(LlmProvider.openAICompatible)
+                    Text(tr("Apple 系统模型", "Apple System Model")).tag(LlmProvider.apple)
+                        .disabled(!vm.appleAvailability.isAvailable)
+                }
+                if !vm.appleAvailability.isAvailable && profile.provider != .apple {
+                    Text(vm.appleAvailability.message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if profile.provider == .apple && !vm.appleAvailability.isAvailable {
+                    Label(tr("当前系统模型不可用：\(vm.appleAvailability.message)", "Apple system model unavailable: \(vm.appleAvailability.message)"),
+                          systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            } header: {
+                Text(tr("服务商", "Provider"))
+            } footer: {
+                if profile.provider == .apple {
+                    Text(tr("使用 macOS 内置的端侧模型，无需 API Key，数据不出本机。不支持截图图片分析（将自动使用本地 OCR）。",
+                            "Uses the on-device model built into macOS. No API Key needed; data never leaves this Mac. Image analysis is not supported (local OCR will be used automatically)."))
+                }
+            }
+
+            if profile.provider == .openAICompatible {
+            Section {
                 TextField(tr("接口地址（Base URL）", "Base URL"), text: $profile.baseUrl)
                 SecureField("API Key", text: $profile.apiKey)
                 LabeledContent(tr("模型 ID", "Model ID")) {
@@ -438,6 +465,7 @@ private struct ProfileEditForm: View {
             } footer: {
                 Text(tr("长会议上下文压缩用，可用速度较快的轻量模型。留空则复用 Model ID。",
                         "Used to compress long meeting history; a fast lightweight model works well. Leave empty to reuse Model ID."))
+            }
             }
 
             Section {

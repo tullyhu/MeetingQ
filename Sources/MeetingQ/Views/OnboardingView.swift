@@ -21,11 +21,16 @@ public final class OnboardingViewModel: ObservableObject {
     @Published public var step = 0
     @Published public var userName = ""
     @Published public var userNicknames = ""
+    @Published public var provider: LlmProvider = .openAICompatible
     @Published public var baseUrl = "http://localhost:8000/v1"
     @Published public var apiKey = ""
     @Published public var modelId = ""
     @Published public var isTesting = false
     @Published public var testResult = ""
+
+    public var appleAvailability: AppleModelAvailability {
+        AppleLlmService.availabilityStatus()
+    }
 
     public static let totalSteps = 4
 
@@ -35,6 +40,14 @@ public final class OnboardingViewModel: ObservableObject {
     }
 
     public func saveLlmProfile() {
+        if provider == .apple {
+            var p = LlmProfile()
+            p.name = tr("Apple 系统模型", "Apple System Model")
+            p.provider = .apple
+            p.isActive = true
+            LlmProfileStore.save([p])
+            return
+        }
         guard !baseUrl.trimmingCharacters(in: .whitespaces).isEmpty,
               !modelId.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         var p = LlmProfile()
@@ -197,9 +210,28 @@ public struct OnboardingView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineSpacing(5)
+            Picker(tr("服务商", "Provider"), selection: $vm.provider) {
+                Text(tr("OpenAI 兼容接口", "OpenAI Compatible")).tag(LlmProvider.openAICompatible)
+                Text(tr("Apple 系统模型（端侧，免配置）", "Apple System Model (on-device, no setup)")).tag(LlmProvider.apple)
+                    .disabled(!vm.appleAvailability.isAvailable)
+            }
+            .pickerStyle(.segmented)
+            if !vm.appleAvailability.isAvailable {
+                Text(tr("Apple 系统模型不可用：\(vm.appleAvailability.message)", "Apple system model unavailable: \(vm.appleAvailability.message)"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if vm.provider == .apple {
+                Text(tr("使用 macOS 内置的端侧模型，无需 API Key，数据不出本机。不支持截图图片分析（将自动使用本地 OCR）。",
+                        "Uses the on-device model built into macOS. No API Key needed; data never leaves this Mac. Image analysis is not supported (local OCR will be used automatically)."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(4)
+            } else {
             field(tr("接口地址", "Base URL"), tr("oMLX 默认: http://localhost:8000/v1", "oMLX default: http://localhost:8000/v1"), $vm.baseUrl)
             field(tr("API Key（本地可留空）", "API Key (optional for local)"), "sk-...", $vm.apiKey)
             field(tr("模型", "Model"), tr("例如：Qwen3.6 多模态 / gpt-4o-mini", "e.g. Qwen3.6 multimodal / gpt-4o-mini"), $vm.modelId)
+            }
             HStack(spacing: 10) {
                 Button(tr("测试连接", "Test Connection")) { vm.testLlm() }
                     .disabled(vm.isTesting)

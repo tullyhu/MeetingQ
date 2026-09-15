@@ -38,7 +38,7 @@ public final class VisionServiceImpl: VisionService {
     }
 
     public func analyzeScreenshot(imagePath: String, currentTopic: String?, surroundingTranscripts: [String]) async throws -> VisionAnalysisResult {
-        if analysisEngine() == "local_ocr" {
+        if analysisEngine() == "local_ocr" || LlmProfileStore.active()?.provider == .apple {
             return await localOcrResult(imagePath: imagePath)
         }
         if consecutiveFails >= Self.maxConsecutiveFails {

@@ -21,6 +21,7 @@ import Foundation
 public final class LlmProfileItem: Identifiable {
     public let id: UUID
     public var name: String = ""
+    public var provider: LlmProvider = .openAICompatible
     public var baseUrl: String = ""
     public var apiKey: String = ""
     public var modelId: String = ""
@@ -36,6 +37,7 @@ public final class LlmProfileItem: Identifiable {
         var p = LlmProfile()
         p.id = id
         p.name = name
+        p.provider = provider
         p.baseUrl = baseUrl
         p.apiKey = apiKey
         p.modelId = modelId
@@ -48,6 +50,7 @@ public final class LlmProfileItem: Identifiable {
     public static func fromModel(_ p: LlmProfile) -> LlmProfileItem {
         let item = LlmProfileItem(id: p.id)
         item.name = p.name
+        item.provider = p.provider
         item.baseUrl = p.baseUrl
         item.apiKey = p.apiKey
         item.modelId = p.modelId
@@ -198,7 +201,12 @@ public final class SettingsViewModel {
 
     public var canFetchModels: Bool {
         !isFetchingModels && selectedProfile != nil
+            && selectedProfile?.provider != .apple
             && !(selectedProfile?.baseUrl.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
+    }
+
+    public var appleAvailability: AppleModelAvailability {
+        AppleLlmService.availabilityStatus()
     }
 
     public func fetchModels() {

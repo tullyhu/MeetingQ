@@ -33,6 +33,9 @@ public final class ConfigurableLlmService: LlmService {
     }
 
     public func summarize(_ transcripts: [Transcript]) async throws -> String {
+        if LlmProfileStore.active()?.provider == .apple {
+            return try await AppleLlmService.summarize(transcripts)
+        }
         let combined = transcripts.map(\.text).joined(separator: "\n")
         if combined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "{\"summary\":\"\(tr("暂无内容", "No content"))\",\"decisions\":[]}"
@@ -56,6 +59,11 @@ public final class ConfigurableLlmService: LlmService {
                                 "No LLM connection configured. Add and activate a profile in Settings"))
         }
         let model = modelOverride ?? profile.visionModelId ?? profile.modelId
+
+        if profile.provider == .apple {
+            throw Self.error(tr("Apple 系统模型不支持图片分析，请在设置中改用本地 OCR 或配置 OpenAI 兼容接口",
+                                "The Apple system model does not support image analysis. Use local OCR or configure an OpenAI-compatible profile in Settings"))
+        }
 
         if profile.baseUrl.trimmingCharacters(in: .whitespaces).isEmpty {
             throw Self.error(tr("Vision 接口地址未配置", "Vision base URL is not configured"))
@@ -102,6 +110,9 @@ public final class ConfigurableLlmService: LlmService {
         guard let profile = LlmProfileStore.active() else {
             throw Self.error(tr("尚未配置大模型接口，请在设置中添加并激活配置",
                                 "No LLM connection configured. Add and activate a profile in Settings"))
+        }
+        if profile.provider == .apple {
+            return try await AppleLlmService.chat(systemPrompt: systemPrompt, userMessage: userMessage)
         }
         if profile.apiKey.trimmingCharacters(in: .whitespaces).isEmpty {
             throw Self.error(tr("LLM 配置「\(profile.name)」的 API Key 为空",

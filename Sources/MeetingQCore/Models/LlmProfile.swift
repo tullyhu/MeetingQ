@@ -16,9 +16,15 @@
 
 import Foundation
 
+public enum LlmProvider: String, Codable, Sendable {
+    case openAICompatible = "openai"
+    case apple = "apple"
+}
+
 public struct LlmProfile: Codable, Identifiable, Equatable, Sendable {
     public var id: UUID = UUID()
     public var name: String = ""
+    public var provider: LlmProvider = .openAICompatible
     public var baseUrl: String = ""
     public var apiKey: String = ""
     public var modelId: String = ""
@@ -27,4 +33,21 @@ public struct LlmProfile: Codable, Identifiable, Equatable, Sendable {
     public var compressionModelId: String?
 
     public init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, provider, baseUrl, apiKey, modelId, isActive, visionModelId, compressionModelId
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        provider = try c.decodeIfPresent(LlmProvider.self, forKey: .provider) ?? .openAICompatible
+        baseUrl = try c.decodeIfPresent(String.self, forKey: .baseUrl) ?? ""
+        apiKey = try c.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
+        modelId = try c.decodeIfPresent(String.self, forKey: .modelId) ?? ""
+        isActive = try c.decodeIfPresent(Bool.self, forKey: .isActive) ?? false
+        visionModelId = try c.decodeIfPresent(String.self, forKey: .visionModelId)
+        compressionModelId = try c.decodeIfPresent(String.self, forKey: .compressionModelId)
+    }
 }
