@@ -35,7 +35,15 @@ if [ -n "${CODESIGN_IDENTITY:-}" ]; then
   codesign --force ${KEYCHAIN_ARGS[@]+"${KEYCHAIN_ARGS[@]}"} --sign "$CODESIGN_IDENTITY" "$DMG_PATH"
 fi
 
-if [ -n "${NOTARY_PROFILE:-}" ]; then
+if [ -n "${NOTARY_API_KEY_BASE64:-}" ]; then
+  AUTHKEY="$(mktemp -t AuthKey-XXXXXX).p8"
+  echo "$NOTARY_API_KEY_BASE64" | base64 --decode > "$AUTHKEY"
+  xcrun notarytool submit "$DMG_PATH" \
+    --key "$AUTHKEY" --key-id "$NOTARY_API_KEY_ID" --issuer "$NOTARY_API_ISSUER" --wait
+  rm -f "$AUTHKEY"
+  xcrun stapler staple "$DMG_PATH"
+  echo "Notarized and stapled"
+elif [ -n "${NOTARY_PROFILE:-}" ]; then
   xcrun notarytool submit "$DMG_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
   xcrun stapler staple "$DMG_PATH"
   echo "Notarized and stapled"
