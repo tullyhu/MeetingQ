@@ -1,0 +1,54 @@
+MeetingQ for Windows - Third-Party Licenses
+============================================
+
+This application bundles the following third-party open source components
+and AI models. We thank their authors and communities.
+
+Libraries (NuGet packages)
+--------------------------
+
+1. sherpa-onnx (org.k2fsa.sherpa.onnx)
+   License: Apache License 2.0
+   https://github.com/k2-fsa/sherpa-onnx
+   Copyright 2022-2025 The sherpa-onnx authors (Next-gen Kaldi project)
+
+2. NAudio
+   License: MIT
+   https://github.com/naudio/NAudio
+   Copyright 2020 Mark Heath
+
+3. CommunityToolkit.Mvvm
+   License: MIT
+   https://github.com/CommunityToolkit/dotnet
+   Copyright (c) .NET Foundation and Contributors
+
+4. Microsoft.EntityFrameworkCore.Sqlite / Microsoft.Extensions.Hosting /
+   System.Speech / System.Drawing.Common
+   License: MIT
+   https://github.com/dotnet/efcore, https://github.com/dotnet/runtime
+   Copyright (c) .NET Foundation and Contributors
+
+AI Models (bundled in the application package)
+----------------------------------------------
+
+5. Paraformer streaming ASR model (Chinese, int8 ONNX)
+   Source: sherpa-onnx model hub / ModelScope
+   License: Apache License 2.0
+   https://k2-fsa.github.io/sherpa/onnx/
+
+6. pyannote-segmentation-3.0 (int8 ONNX)
+   Author: pyannote.ai
+   License: MIT
+   https://huggingface.co/pyannote/segmentation-3.0
+
+7. 3D-Speaker ERes2Net speaker embedding model (Chinese)
+   Source: ModelScope / 3D-Speaker project (Alibaba)
+   License: Apache License 2.0
+   https://github.com/modelscope/3D-Speaker
+
+---
+
+Full license texts:
+
+- Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0
+- MIT License: https://opensource.org/licenses/MIT
