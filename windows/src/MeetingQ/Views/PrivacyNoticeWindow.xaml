@@ -40,21 +40,21 @@ MeetingQ 是一款<Bold>完全本地运行</Bold>的会议助理，请在使用�
                            FontWeight="SemiBold" Margin="0,0,0,4"/>
                 <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#555555"
                            LineHeight="20" Margin="0,0,0,14">
-会议语音在本机离线完成转写和说话人识别，不发送至任何语音识别服务器；仅转录文本会发送至大语言模型（LLM）生成摘要。所有 API Key 使用 Windows DPAPI 加密存储，不离开本机。
+会议语音在本机离线完成转写和说话人识别（sherpa-onnx），不发送至任何语音识别服务器。仅以下情况会产生网络请求：1）首次运行从 HuggingFace / GitHub 下载约 150MB 本地模型；2）<Bold>您主动配置</Bold>的大语言模型（LLM）接口会收到转录文本以生成摘要，若启用了多模态/视觉分析，<Bold>截图也会发送至您配置的接口</Bold>——该接口由您选择并控制；选择「本地 OCR」模式则完全离线。所有 API Key 使用 Windows DPAPI 加密存储，不离开本机。
                 </TextBlock>
 
                 <TextBlock Text="💾  本地存储" Foreground="#2563EB" FontSize="12"
                            FontWeight="SemiBold" Margin="0,0,0,4"/>
                 <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#555555"
                            LineHeight="20" Margin="0,0,0,14">
-转录文本、摘要、截图（JPEG）保存在本机 %LOCALAPPDATA%\MeetingQ\ 目录，不上传至任何服务器。
+转录文本、摘要、截图（JPEG）保存在本机 %LOCALAPPDATA%\MeetingQ\ 目录，不上传至任何服务器。会议期间会临时保存 WAV 录音文件（recordings 子目录）用于会后离线说话人分离，分离完成后自动删除；若未执行或失败，文件可能保留，您可随时手动删除。本应用无遥测，仅在本机写入可删除的诊断日志。
                 </TextBlock>
 
                 <TextBlock Text="🎤  采集范围" Foreground="#2563EB" FontSize="12"
                            FontWeight="SemiBold" Margin="0,0,0,4"/>
                 <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#555555"
                            LineHeight="20">
-仅在您点击「开始监听」后采集系统扬声器输出（会议播放声音），不采集麦克风输入，不在后台静默录音。
+仅在您点击「开始监听」后采集系统扬声器输出（会议播放声音），不在后台静默录音。麦克风采集为可选功能、默认关闭，仅当您在设置中主动开启后才会采集，用于识别您本人的发言。
                 </TextBlock>
             </StackPanel>
         </ScrollViewer>
