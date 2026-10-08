@@ -1,0 +1,195 @@
+<Window x:Class="MeetingQ.Views.QuickSummaryPopup"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        mc:Ignorable="d"
+        Title="快速摘要"
+        Width="480" Height="560"
+        MinWidth="360" MinHeight="420"
+        WindowStyle="None"
+        ResizeMode="CanResizeWithGrip"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        KeyDown="Window_KeyDown">
+
+    <Border CornerRadius="12"
+            Background="#FFFFFF"
+            BorderBrush="#DDDDDD"
+            BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.15" Color="Black"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="44"/>   <!-- Title bar -->
+                <RowDefinition Height="*"/>    <!-- Content area -->
+                <RowDefinition Height="Auto"/> <!-- Loading indicator / close -->
+            </Grid.RowDefinitions>
+
+            <!-- Title bar -->
+            <Border Grid.Row="0"
+                    Background="#F5F5F5"
+                    CornerRadius="12,12,0,0"
+                    MouseDown="TitleBar_MouseDown">
+                <Grid Margin="16,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="⚡" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="快速摘要"
+                                   Foreground="#111111"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="ESC 关闭"
+                               Foreground="#AAAAAA"
+                               FontSize="11"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+            <!-- Content scrollable area -->
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          Padding="16,8">
+                <StackPanel>
+                    <!-- Skeleton / real content toggle via visibility -->
+                    <Border x:Name="SkeletonPanel"
+                            Visibility="Visible"
+                            Margin="0,8">
+                        <StackPanel>
+                            <TextBlock Text="加载中..."
+                                       Foreground="#AAAAAA"
+                                       FontSize="13"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,20"/>
+                            <!-- Skeleton lines -->
+                            <Border Height="12" Background="#EEEEEE" CornerRadius="6" Margin="0,6"/>
+                            <Border Height="12" Background="#EEEEEE" CornerRadius="6" Margin="0,6" Width="340" HorizontalAlignment="Left"/>
+                            <Border Height="12" Background="#EEEEEE" CornerRadius="6" Margin="0,6" Width="280" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border x:Name="ContentPanel" Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Text="当前议题"
+                                       Foreground="#2563EB"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,0,6"/>
+                            <TextBlock x:Name="TopicTextBlock"
+                                       Text="（议题名）"
+                                       Foreground="#111111"
+                                       FontSize="14"
+                                       FontWeight="Medium"
+                                       Margin="0,0,0,16"/>
+
+                            <TextBlock Text="要点摘要"
+                                       Foreground="#2563EB"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,0,6"/>
+                            <TextBlock x:Name="SummaryTextBlock"
+                                       Text="（摘要占位）"
+                                       Foreground="#222222"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       LineHeight="20"
+                                       Margin="0,0,0,16"/>
+
+                            <TextBlock Text="决策"
+                                       Foreground="#2563EB"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,0,6"/>
+                            <ItemsControl x:Name="DecisionsItemsControl">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,3">
+                                            <TextBlock Text="• " Foreground="#16A34A" FontSize="12"/>
+                                            <TextBlock Text="{Binding}"
+                                                       Foreground="#222222"
+                                                       FontSize="12"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock x:Name="ActionItemsHeader"
+                                       Text="行动项"
+                                       Foreground="#2563EB"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Margin="0,16,0,6"
+                                       Visibility="Collapsed"/>
+                            <ItemsControl x:Name="ActionItemsControl">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,3">
+                                            <TextBlock Text="→ " Foreground="#D97706" FontSize="12"/>
+                                            <TextBlock Text="{Binding}"
+                                                       Foreground="#222222"
+                                                       FontSize="12"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Bottom bar -->
+            <Border Grid.Row="2"
+                    Background="#F0F0F0"
+                    CornerRadius="0,0,12,12"
+                    Padding="16,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0"
+                            Content="🔄 刷新"
+                            Padding="12,6" Margin="0,0,8,0"
+                            FontSize="12"
+                            Background="#EEF2FF"
+                            Foreground="#6366F1"
+                            BorderBrush="#C7D2FE"
+                            BorderThickness="1"
+                            Cursor="Hand"
+                            Click="RefreshButton_Click"/>
+                    <Button Grid.Column="1"
+                            x:Name="CopyButton"
+                            Content="📋 复制摘要"
+                            IsEnabled="False"
+                            Padding="12,6"
+                            FontSize="12"
+                            Background="#F5F5F5"
+                            Foreground="#555555"
+                            BorderBrush="#DDDDDD"
+                            BorderThickness="1"
+                            Cursor="Hand"
+                            Click="CopyButton_Click"/>
+                    <Button Grid.Column="3"
+                            Content="关闭"
+                            Padding="20,6"
+                            FontSize="12"
+                            Background="#DDDDDD"
+                            Foreground="#333333"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            Click="CloseButton_Click"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

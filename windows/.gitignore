@@ -1,0 +1,6 @@
+bin/
+obj/
+dist/
+assets/models/
+*.user
+.vs/

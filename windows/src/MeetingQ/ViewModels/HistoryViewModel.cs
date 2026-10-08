@@ -1,0 +1,1084 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using MeetingQ.Data;
+using MeetingQ.Services;
+using MeetingQ.Services.Interfaces;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Text;
+
+namespace MeetingQ.ViewModels;
+
+public class TranscriptItem
+{
+    public DateTime Timestamp { get; init; }
+    public string   TimeLabel => Timestamp.ToString("HH:mm:ss");
+    public string?  Speaker   { get; set; }
+    public string   Text      { get; init; } = string.Empty;
+}
+
+public class ActionItemDisplay
+{
+    public string AssignedTo { get; init; } = string.Empty;
+    public string Task       { get; init; } = string.Empty;
+    public string? Deadline  { get; init; }
+    public string Label => string.IsNullOrEmpty(Deadline)
+        ? $"{AssignedTo}：{Task}"
+        : $"{AssignedTo}：{Task}（{Deadline}）";
+}
+
+public partial class SessionItem : ObservableObject
+{
+    public int      SessionId       { get; init; }
+    public string   Title           { get; init; } = string.Empty;
+    public DateTime StartTime       { get; init; }
+    public DateTime? EndTime        { get; init; }
+    public int      ScreenshotCount { get; init; }
+    public string   DateLabel       => StartTime.ToString("yyyy年MM月dd日  HH:mm");
+    public string   DurationLabel
+    {
+        get
+        {
+            if (EndTime is null) return "—";
+            var d = EndTime.Value > StartTime ? EndTime.Value - StartTime : TimeSpan.Zero;
+            return d.TotalHours >= 1
+                ? $"{(int)d.TotalHours}h {d.Minutes}m"
+                : $"{d.Minutes}m {d.Seconds}s";
+        }
+    }
+    [ObservableProperty]
+    private string? _overallSummary;
+    public List<string>            TopicTitles    { get; init; } = new();
+    public string TopicsLabel => TopicTitles.Count == 0 ? "（无议题）" : string.Join("  ·  ", TopicTitles);
+
+    // ── Mutable detail properties (set after lazy load; notify UI) ──
+
+    [ObservableProperty]
+    private List<string> _topicSummaries = new();   // same order as TopicTitles; null entries for missing
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TranscriptCountLabel))]
+    private int _transcriptCount;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTranscripts))]
+    [NotifyPropertyChangedFor(nameof(TranscriptCountLabel))]
+    private List<TranscriptItem> _transcripts = new();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasScreenshots))]
+    private List<ScreenshotItem> _screenshotPaths = new();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDecisions))]
+    private List<string> _decisions = new();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActionItems))]
+    private List<ActionItemDisplay> _actionItems = new();
+
+    public string TranscriptCountLabel => $"{TranscriptCount} 条转录";
+    public bool   HasTranscripts       => Transcripts.Count > 0;
+    public bool   HasScreenshots       => ScreenshotPaths.Count > 0;
+    public bool   HasDecisions         => Decisions.Count > 0;
+    public bool   HasActionItems       => ActionItems.Count > 0;
+}
+
+public partial class HistoryViewModel : ObservableObject
+{
+    private readonly IDbContextFactory<AppDbContext> _dbFactory;
+    private readonly ILogger<HistoryViewModel> _logger;
+    private readonly IVisionService? _vision;
+    private readonly ILlmService _llm;
+
+    // Sessions whose detail (transcripts, decisions, action items) is already loaded.
+    private readonly HashSet<int> _loadedIds = new();
+    private CancellationTokenSource? _detailLoadCts;
+
+    private List<SessionItem> _allSessions = new();
+    public ObservableCollection<SessionItem> Sessions { get; } = new();
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ExportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ExportTranscriptCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DeleteCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ExportHtmlCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RegenerateWithVisionCommand))]
+    [NotifyCanExecuteChangedFor(nameof(EditSpeakersCommand))]
+    private SessionItem? _selectedSession;
+
+    [ObservableProperty] private string _statusText    = "加载历史会议...";
+    [ObservableProperty] private bool   _isLoading     = true;
+    [ObservableProperty] private bool   _isLoadingDetail;
+    [ObservableProperty] private bool   _hasSelected;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FilteredCount))]
+    private string _searchText = string.Empty;
+    public int FilteredCount => Sessions.Count;
+    public int TotalCount => _allSessions.Count;
+
+    public event Func<string, string?>? ExportPathRequested;
+    public event Func<string, string?>? ExportTranscriptPathRequested;
+    public event Func<string, string?>? ExportHtmlPathRequested;
+    public event Func<int, bool>? ConfirmDeleteRequested;
+    public event Func<SessionItem, Task>? EditSpeakersRequested;
+
+    public HistoryViewModel(IDbContextFactory<AppDbContext> dbFactory,
+                             ILogger<HistoryViewModel> logger,
+                             IVisionService? vision,
+                             ILlmService llm)
+    {
+        _dbFactory = dbFactory;
+        _logger    = logger;
+        _vision    = vision;
+        _llm       = llm;
+    }
+
+    // ── Initial load: session list with metadata only ──────────────────────
+    // No transcript/decision includes — avoids Cartesian product explosion
+    // and keeps the window open instantly regardless of history size.
+
+    public async Task LoadAsync()
+    {
+        IsLoading  = true;
+        StatusText = "加载历史会议...";
+        Sessions.Clear();
+        _allSessions.Clear();
+        _loadedIds.Clear();
+
+        try
+        {
+            using var db = _dbFactory.CreateDbContext();
+
+            // List view: metadata only — screenshot AISummary (long text) is
+            // loaded lazily in LoadDetailAsync when a session is selected.
+            var sessions = await db.Sessions
+                .OrderByDescending(s => s.StartTime)
+                .AsNoTracking()
+                .Select(s => new
+                {
+                    s.SessionId,
+                    s.Title,
+                    s.StartTime,
+                    s.EndTime,
+                    s.Summary,
+                    TopicTitles = s.Topics.OrderBy(t => t.OrderIndex).Select(t => t.Title).ToList(),
+                    Screenshots = s.Screenshots
+                        .OrderBy(sc => sc.Timestamp)
+                        .Select(sc => new { sc.FilePath, sc.Timestamp, sc.AnalysisStatus, sc.ActiveSpeakerName })
+                        .ToList()
+                })
+                .ToListAsync();
+
+            // Group-by aggregate translates to SQL GROUP BY — avoids the
+            // SQLite variable limit of a large IN (...) filter.
+            var transcriptCounts = await db.Transcripts
+                .GroupBy(t => t.Topic.SessionId)
+                .Select(g => new { SessionId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.SessionId, x => x.Count);
+
+            foreach (var s in sessions)
+            {
+                _allSessions.Add(new SessionItem
+                {
+                    SessionId       = s.SessionId,
+                    Title           = s.Title ?? $"会议 {s.StartTime:MM-dd}",
+                    StartTime       = s.StartTime,
+                    EndTime         = s.EndTime,
+                    OverallSummary  = s.Summary,
+                    TranscriptCount = transcriptCounts.GetValueOrDefault(s.SessionId, 0),
+                    ScreenshotCount = s.Screenshots.Count,
+                    TopicTitles     = s.TopicTitles,
+                    ScreenshotPaths = s.Screenshots
+                                        .Select(sc => new ScreenshotItem(sc.FilePath, sc.Timestamp)
+                                        {
+                                            AnalysisStatus = sc.AnalysisStatus,
+                                            ActiveSpeakerName = sc.ActiveSpeakerName
+                                        })
+                                        .ToList(),
+                    Transcripts     = [],
+                    Decisions       = [],
+                    ActionItems     = []
+                });
+            }
+
+            ApplyFilter();
+            StatusText = sessions.Count == 0 ? "暂无历史会议" : $"共 {sessions.Count} 次会议";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load history");
+            StatusText = $"加载失败：{ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    partial void OnSearchTextChanged(string value)
+    {
+        ApplyFilter();
+        OnPropertyChanged(nameof(FilteredCount));
+    }
+
+    private void ApplyFilter()
+    {
+        var selected = SelectedSession;
+        Sessions.Clear();
+        var filtered = string.IsNullOrWhiteSpace(SearchText)
+            ? _allSessions
+            : _allSessions.Where(s =>
+                s.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                s.TopicTitles.Any(t => t.Contains(SearchText, StringComparison.OrdinalIgnoreCase)));
+        foreach (var s in filtered)
+            Sessions.Add(s);
+        if (selected is not null)
+        {
+            var stillHere = Sessions.FirstOrDefault(s => s.SessionId == selected.SessionId);
+            if (stillHere is not null)
+                SelectedSession = stillHere;
+        }
+        StatusText = string.IsNullOrWhiteSpace(SearchText)
+            ? $"共 {_allSessions.Count} 次会议"
+            : $"筛选：{Sessions.Count} / {_allSessions.Count} 次";
+        OnPropertyChanged(nameof(FilteredCount));
+        OnPropertyChanged(nameof(TotalCount));
+    }
+
+    // ── Lazy detail load: triggered when user selects a session ────────────
+
+    partial void OnSelectedSessionChanged(SessionItem? value)
+    {
+        HasSelected = value is not null;
+        var cts = _detailLoadCts;
+        _detailLoadCts = null;
+        cts?.Cancel();
+        cts?.Dispose();
+        if (value is not null && !_loadedIds.Contains(value.SessionId))
+        {
+            _detailLoadCts = new CancellationTokenSource();
+            _ = LoadDetailAsync(value.SessionId, _detailLoadCts.Token);
+        }
+    }
+
+    private async Task LoadDetailAsync(int sessionId, CancellationToken ct = default)
+    {
+        IsLoadingDetail = true;
+        try
+        {
+            using var db = _dbFactory.CreateDbContext();
+
+            var topics = await db.Topics
+                .Where(t => t.SessionId == sessionId)
+                .Include(t => t.Transcripts)
+                .Include(t => t.Decisions)
+                .Include(t => t.ActionItems)
+                .OrderBy(t => t.OrderIndex)
+                .AsSplitQuery()
+                .AsNoTracking()
+                .ToListAsync(ct);
+
+            ct.ThrowIfCancellationRequested();
+
+            var allTopicSummaries = topics
+                .Select(t => t.Summary ?? string.Empty)
+                .ToList();
+
+            var allTranscripts = topics
+                .SelectMany(t => t.Transcripts.OrderBy(tr => tr.Timestamp))
+                .Select(t => new TranscriptItem
+                {
+                    Timestamp = t.Timestamp,
+                    Speaker   = t.Speaker,
+                    Text      = t.Text
+                }).ToList();
+
+            var allDecisions = topics
+                .SelectMany(t => t.Decisions.OrderBy(d => d.Timestamp))
+                .Select(d => d.DecisionText)
+                .ToList();
+
+            var allActionItems = topics
+                .SelectMany(t => t.ActionItems.OrderBy(a => a.Timestamp))
+                .Select(a => new ActionItemDisplay
+                {
+                    AssignedTo = a.AssignedTo,
+                    Task       = a.Task,
+                    Deadline   = a.Deadline
+                })
+                .ToList();
+
+            // Reload screenshots with latest AI analysis results + session summary in one query
+            var detail = await db.Sessions
+                .Where(s => s.SessionId == sessionId)
+                .Select(s => new
+                {
+                    s.Summary,
+                    Screenshots = s.Screenshots
+                        .OrderBy(sc => sc.Timestamp)
+                        .Select(sc => new ScreenshotItem(sc.FilePath, sc.Timestamp)
+                        {
+                            AiSummary = sc.AISummary,
+                            AnalysisStatus = sc.AnalysisStatus,
+                            ActiveSpeakerName = sc.ActiveSpeakerName
+                        })
+                        .ToList()
+                })
+                .FirstOrDefaultAsync(ct);
+
+            ct.ThrowIfCancellationRequested();
+
+            var allScreenshots = detail?.Screenshots ?? new List<ScreenshotItem>();
+            var sessionSummary = detail?.Summary;
+
+            // Find the target item in the Sessions list and mutate it in-place.
+            var target = Sessions.FirstOrDefault(s => s.SessionId == sessionId);
+            if (target is null) return;
+
+            target.TopicSummaries  = allTopicSummaries;
+            target.Transcripts     = allTranscripts;
+            target.Decisions       = allDecisions;
+            target.ActionItems     = allActionItems;
+            target.TranscriptCount = allTranscripts.Count;
+            target.ScreenshotPaths = allScreenshots;
+            target.OverallSummary  = sessionSummary;
+
+            // Mark as loaded so re-selection doesn't re-fetch (only after data is applied).
+            // Since SessionItem is now ObservableObject, properties notify automatically.
+            _loadedIds.Add(sessionId);
+        }
+        catch (OperationCanceledException)
+        {
+            // Selection changed before the load finished — not an error.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load session detail for {SessionId}", sessionId);
+        }
+        finally
+        {
+            IsLoadingDetail = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task RefreshAsync()
+    {
+        SelectedSession = null;
+        await LoadAsync();
+    }
+
+    private bool CanExport() => SelectedSession is not null;
+    private bool CanDelete() => SelectedSession is not null;
+
+    [RelayCommand(CanExecute = nameof(CanDelete))]
+    private async Task DeleteAsync()
+    {
+        if (SelectedSession is null) return;
+        if (ConfirmDeleteRequested?.Invoke(SelectedSession.SessionId) != true) return;
+        var id = SelectedSession.SessionId;
+        try
+        {
+            using var db = _dbFactory.CreateDbContext();
+            var session = await db.Sessions.FindAsync(id);
+            if (session is null) return;
+            db.Sessions.Remove(session);
+            await db.SaveChangesAsync();
+
+            _allSessions.RemoveAll(s => s.SessionId == id);
+            _loadedIds.Remove(id);
+            SelectedSession = null;
+            ApplyFilter();
+            StatusText = "已删除";
+            _logger.LogInformation("[History] Deleted session {Id}", id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[History] Failed to delete session {Id}", id);
+            StatusText = $"删除失败：{ex.Message}";
+        }
+    }
+
+    private bool CanEditSpeakers() => SelectedSession is not null;
+
+    [RelayCommand(CanExecute = nameof(CanEditSpeakers))]
+    private async Task EditSpeakersAsync()
+    {
+        if (SelectedSession is null) return;
+        await EnsureDetailLoadedAsync(SelectedSession);
+        if (EditSpeakersRequested is not null)
+            await EditSpeakersRequested.Invoke(SelectedSession);
+    }
+
+    public static List<string> GetDistinctSpeakers(SessionItem session)
+    {
+        return session.Transcripts
+            .Where(t => !string.IsNullOrWhiteSpace(t.Speaker))
+            .Select(t => t.Speaker!)
+            .Distinct()
+            .OrderBy(s => s)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Renames a speaker across all transcripts (and questions) of a session.
+    /// Renaming two speakers to the same name effectively merges them.
+    /// Persists to the database and updates the in-memory view.
+    /// </summary>
+    public async Task<bool> RenameSpeakerAsync(SessionItem session, string oldName, string newName)
+    {
+        newName = newName.Trim();
+        if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName) || oldName == newName)
+            return false;
+
+        try
+        {
+            using var db = _dbFactory.CreateDbContext();
+
+            var transcripts = await db.Transcripts
+                .Where(t => t.Topic.SessionId == session.SessionId && t.Speaker == oldName)
+                .ToListAsync();
+            foreach (var t in transcripts)
+                t.Speaker = newName;
+
+            var questions = await db.Questions
+                .Where(q => q.Topic.SessionId == session.SessionId && q.Speaker == oldName)
+                .ToListAsync();
+            foreach (var q in questions)
+                q.Speaker = newName;
+
+            await db.SaveChangesAsync();
+
+            // Rebuild the in-memory list from the DB so the view always
+            // reflects the persisted state.
+            session.Transcripts = await db.Transcripts
+                .Where(t => t.Topic.SessionId == session.SessionId)
+                .OrderBy(t => t.Timestamp)
+                .AsNoTracking()
+                .Select(t => new TranscriptItem
+                {
+                    Timestamp = t.Timestamp,
+                    Speaker   = t.Speaker,
+                    Text      = t.Text
+                })
+                .ToListAsync();
+
+            var updated = transcripts.Count;
+
+            StatusText = $"已将「{oldName}」修正为「{newName}」（{updated} 条转录）";
+            _logger.LogInformation("[History] Speaker renamed: {Old} → {New} in session {Id} ({Count} transcripts)",
+                oldName, newName, session.SessionId, updated);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[History] Failed to rename speaker {Old} in session {Id}",
+                oldName, session.SessionId);
+            StatusText = $"发言人修正失败：{ex.Message}";
+            return false;
+        }
+    }
+
+    private bool CanRegenerateWithVision() => SelectedSession is not null && _vision is not null;
+
+    [RelayCommand(CanExecute = nameof(CanRegenerateWithVision))]
+    private async Task RegenerateWithVisionAsync()
+    {
+        var session = SelectedSession;
+        if (session is null) return;
+
+        if (_vision is null)
+        {
+            StatusText = "Vision 服务不可用，请确认已配置并启用多模态";
+            return;
+        }
+
+        StatusText = "多模态重新分析中...";
+        _logger.LogInformation("[RegenVision] Starting vision re-analysis for session {Id}", session.SessionId);
+
+        try
+        {
+            using var db = _dbFactory.CreateDbContext();
+
+            var screenshots = await db.Screenshots
+                .Where(s => s.SessionId == session.SessionId)
+                .OrderBy(s => s.Timestamp)
+                .ToListAsync();
+
+            if (screenshots.Count == 0)
+            {
+                StatusText = "该会议无截图，无法进行多模态分析";
+                return;
+            }
+
+            var analyzed = 0;
+            foreach (var sc in screenshots)
+            {
+                if (sc.AnalysisStatus == "ready" && !string.IsNullOrWhiteSpace(sc.AISummary))
+                    continue;
+
+                if (!File.Exists(sc.FilePath))
+                {
+                    sc.AnalysisStatus = "failed";
+                    continue;
+                }
+
+                try
+                {
+                    var result = await _vision!.AnalyzeScreenshotAsync(
+                        sc.FilePath, string.Empty, new List<string>());
+
+                    if (!string.IsNullOrWhiteSpace(result.AiSummary) &&
+                        !result.AiSummary.StartsWith('['))
+                    {
+                        sc.AISummary = result.AiSummary;
+                        sc.MeetingRelevance = result.MeetingRelevance;
+                        sc.ContentType = result.ContentType;
+                        sc.AnalysisStatus = "ready";
+                        analyzed++;
+                    }
+                    else
+                    {
+                        sc.AnalysisStatus = "failed";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    sc.AnalysisStatus = "failed";
+                    _logger.LogWarning(ex, "[RegenVision] Screenshot {Id} error", sc.ScreenshotId);
+                }
+            }
+
+            await db.SaveChangesAsync();
+
+            // Regenerate the session summary so it reflects the new screenshot analysis
+            if (analyzed > 0)
+            {
+                StatusText = "重新生成会议总结...";
+                try
+                {
+                    var meetingSession = await db.Sessions.FindAsync(session.SessionId);
+                    var topics = await db.Topics
+                        .Where(t => t.SessionId == session.SessionId)
+                        .Include(t => t.Transcripts)
+                        .Include(t => t.Decisions)
+                        .Include(t => t.ActionItems)
+                        .OrderBy(t => t.OrderIndex)
+                        .AsSplitQuery()
+                        .ToListAsync();
+
+                    if (meetingSession is not null && topics.Any(t => t.Transcripts.Count > 0))
+                    {
+                        var prompt = FloatingWindowViewModel.BuildFinalSummaryPrompt(
+                            meetingSession, topics, screenshots);
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+                        var response = await _llm.AnalyzeAsync(prompt, cts.Token);
+                        var json = response.Trim();
+                        if (json.StartsWith("```"))
+                            json = System.Text.RegularExpressions.Regex.Replace(json, @"^```\w*\n?|\n?```$", "");
+                        using var doc = System.Text.Json.JsonDocument.Parse(json);
+                        if (doc.RootElement.TryGetProperty("summary", out var summaryEl))
+                        {
+                            meetingSession.Summary = summaryEl.GetString();
+                            await db.SaveChangesAsync();
+                            _logger.LogInformation("[RegenVision] Session summary regenerated for {Id}", session.SessionId);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[RegenVision] Failed to regenerate session summary");
+                }
+            }
+
+            // Force reload session details to show updated analysis
+            _loadedIds.Remove(session.SessionId);
+            await LoadDetailAsync(session.SessionId);
+
+            StatusText = analyzed > 0
+                ? $"多模态分析完成：{analyzed} 张截图已分析，会议总结已更新"
+                : "所有截图已有分析结果，无需重复分析";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[RegenVision] Failed");
+            StatusText = $"多模态分析失败：{ex.Message}";
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private async Task ExportAsync()
+    {
+        if (SelectedSession is null) return;
+        await EnsureDetailLoadedAsync(SelectedSession);
+        var defaultName = $"MeetingMinutes_{SelectedSession.StartTime:yyyyMMdd_HHmm}.md";
+        var path = ExportPathRequested?.Invoke(defaultName);
+        if (path is null) return;
+
+        try
+        {
+            var exportDir  = Path.GetDirectoryName(path) ?? ".";
+            var mdFileName = Path.GetFileNameWithoutExtension(path);
+            var assetDir   = Path.Combine(exportDir, $"{mdFileName}_files");
+            var assetRel   = $"{mdFileName}_files";
+
+            var copiedMap = await CopyScreenshotsForExportAsync(SelectedSession, assetDir);
+
+            var md = BuildMarkdown(SelectedSession, assetRel, copiedMap);
+            await File.WriteAllTextAsync(path, md, Encoding.UTF8);
+            _logger.LogInformation("[Export] Saved meeting minutes to {Path} ({AssetCount} assets)",
+                path, copiedMap.Count);
+            StatusText = $"已导出：{Path.GetFileName(path)}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Export] Failed to save meeting minutes");
+            StatusText = $"导出失败：{ex.Message}";
+        }
+    }
+
+    private async Task<Dictionary<string, string>> CopyScreenshotsForExportAsync(
+        SessionItem s, string assetDir)
+    {
+        var map = new Dictionary<string, string>();
+        if (s.ScreenshotPaths.Count == 0) return map;
+
+        Directory.CreateDirectory(assetDir);
+
+        var index = 0;
+        foreach (var si in s.ScreenshotPaths)
+        {
+            index++;
+            var ext      = Path.GetExtension(si.FilePath);
+            var relName  = $"screenshot_{si.Timestamp:HHmmss}_{index}{ext}";
+            var destPath = Path.Combine(assetDir, relName);
+
+            try
+            {
+                if (File.Exists(si.FilePath))
+                {
+                    await FileCopyAsync(si.FilePath, destPath);
+                    map[si.FilePath] = relName;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Export] Failed to copy screenshot {Path}", si.FilePath);
+            }
+        }
+
+        return map;
+    }
+
+    private static async Task FileCopyAsync(string src, string dst)
+    {
+        using var sourceStream = new FileStream(src, FileMode.Open, FileAccess.Read,
+            FileShare.Read, 4096, FileOptions.Asynchronous);
+        using var destStream = new FileStream(dst, FileMode.Create, FileAccess.Write,
+            FileShare.None, 4096, FileOptions.Asynchronous);
+        await sourceStream.CopyToAsync(destStream);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private async Task ExportHtmlAsync()
+    {
+        if (SelectedSession is null) return;
+        await EnsureDetailLoadedAsync(SelectedSession);
+        var defaultName = $"MeetingMinutes_{SelectedSession.StartTime:yyyyMMdd_HHmm}.html";
+        var path = ExportHtmlPathRequested?.Invoke(defaultName);
+        if (path is null) return;
+
+        try
+        {
+            var dataUris = new Dictionary<string, string?>();
+            foreach (var shot in SelectedSession.ScreenshotPaths)
+            {
+                if (dataUris.ContainsKey(shot.FilePath)) continue;
+                dataUris[shot.FilePath] = await EncodeScreenshotAsDataUriAsync(shot.FilePath);
+            }
+
+            var html = BuildHtml(SelectedSession, dataUris);
+            await File.WriteAllTextAsync(path, html, Encoding.UTF8);
+            _logger.LogInformation("[Export] Saved meeting minutes HTML to {Path}", path);
+            StatusText = $"已导出：{Path.GetFileName(path)}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Export] Failed to save meeting minutes HTML");
+            StatusText = $"导出失败：{ex.Message}";
+        }
+    }
+
+    private async Task<string?> EncodeScreenshotAsDataUriAsync(string filePath)
+    {
+        try
+        {
+            if (!File.Exists(filePath)) return null;
+
+            var bytes = await File.ReadAllBytesAsync(filePath);
+            var mime = Path.GetExtension(filePath).ToLowerInvariant() switch
+            {
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png"            => "image/png",
+                ".bmp"            => "image/bmp",
+                ".gif"            => "image/gif",
+                _                 => "image/jpeg"
+            };
+            return $"data:{mime};base64,{Convert.ToBase64String(bytes)}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Export] Failed to encode screenshot {Path}", filePath);
+            return null;
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private async Task ExportTranscriptAsync()
+    {
+        if (SelectedSession is null) return;
+        await EnsureDetailLoadedAsync(SelectedSession);
+        var defaultName = $"Transcript_{SelectedSession.StartTime:yyyyMMdd_HHmm}.txt";
+        var path = ExportTranscriptPathRequested?.Invoke(defaultName);
+        if (path is null) return;
+
+        try
+        {
+            var text = BuildTranscriptText(SelectedSession);
+            await File.WriteAllTextAsync(path, text, Encoding.UTF8);
+            _logger.LogInformation("[Export] Saved transcript to {Path}", path);
+            StatusText = $"已导出转写：{System.IO.Path.GetFileName(path)}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Export] Failed to save transcript");
+            StatusText = $"导出失败：{ex.Message}";
+        }
+    }
+
+    private async Task EnsureDetailLoadedAsync(SessionItem session)
+    {
+        if (_loadedIds.Contains(session.SessionId)) return;
+        await LoadDetailAsync(session.SessionId);
+    }
+
+    private static string BuildTranscriptText(SessionItem s)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine(s.Title);
+        sb.AppendLine(new string('-', s.Title.Length));
+        sb.AppendLine($"日期：{s.StartTime:yyyy年MM月dd日 HH:mm}");
+        sb.AppendLine($"时长：{s.DurationLabel}");
+        sb.AppendLine($"转录条数：{s.TranscriptCount}");
+        sb.AppendLine();
+        foreach (var tr in s.Transcripts)
+        {
+            var speaker = string.IsNullOrEmpty(tr.Speaker) ? "" : $"{tr.Speaker}：";
+            var text = tr.Text.Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ');
+            sb.AppendLine($"[{tr.TimeLabel}] {speaker}{text}");
+        }
+        return sb.ToString();
+    }
+
+    private static string EscapeMarkdown(string text)
+    {
+        var escaped = text
+            .Replace("\\", "\\\\")
+            .Replace("`", "\\`")
+            .Replace("*", "\\*")
+            .Replace("[", "\\[")
+            .Replace("]", "\\]")
+            .Replace("|", "\\|");
+        var lines = escaped.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].TrimStart();
+            if (trimmed.StartsWith('#'))
+            {
+                var idx = lines[i].IndexOf('#');
+                lines[i] = lines[i].Insert(idx, "\\");
+            }
+        }
+        return string.Join('\n', lines);
+    }
+
+    private static string BuildMarkdown(SessionItem s, string assetRelDir,
+        Dictionary<string, string> screenshotMap)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"# 会议纪要 — {s.Title}");
+        sb.AppendLine();
+        sb.AppendLine($"**日期：** {s.StartTime:yyyy年MM月dd日 HH:mm}  ");
+        sb.AppendLine($"**时长：** {s.DurationLabel}  ");
+        sb.AppendLine($"**转录条数：** {s.TranscriptCount}  ");
+        if (s.ScreenshotPaths.Count > 0)
+            sb.AppendLine($"**截图数：** {s.ScreenshotPaths.Count}");
+        sb.AppendLine();
+
+        // ── Overall meeting summary ──
+        if (!string.IsNullOrWhiteSpace(s.OverallSummary))
+        {
+            sb.AppendLine("## 会议总结");
+            sb.AppendLine();
+            sb.AppendLine($"{EscapeMarkdown(s.OverallSummary)}  ");
+            sb.AppendLine();
+        }
+
+        // ── Topic summaries ──
+        var summaryTexts = s.TopicSummaries
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .ToList();
+        if (summaryTexts.Count > 0)
+        {
+            sb.AppendLine("## 议题摘要");
+            sb.AppendLine();
+            foreach (var t in summaryTexts)
+            {
+                sb.AppendLine($"{EscapeMarkdown(t)}  ");
+                sb.AppendLine();
+            }
+        }
+
+        // ── Topics ──
+        if (s.TopicTitles.Count > 0)
+        {
+            sb.AppendLine("## 议题");
+            for (int i = 0; i < s.TopicTitles.Count; i++)
+            {
+                sb.AppendLine($"- **{s.TopicTitles[i]}**");
+                if (i < s.TopicSummaries.Count && !string.IsNullOrWhiteSpace(s.TopicSummaries[i]))
+                    sb.AppendLine($"  {EscapeMarkdown(s.TopicSummaries[i])}");
+            }
+            sb.AppendLine();
+        }
+
+        // ── Decisions ──
+        if (s.HasDecisions)
+        {
+            sb.AppendLine("## 决策");
+            foreach (var d in s.Decisions)
+                sb.AppendLine($"- {EscapeMarkdown(d)}");
+            sb.AppendLine();
+        }
+
+        // ── Action Items ──
+        if (s.HasActionItems)
+        {
+            sb.AppendLine("## 行动项");
+            sb.AppendLine("| 负责人 | 任务 | 截止时间 |");
+            sb.AppendLine("|--------|------|----------|");
+            foreach (var a in s.ActionItems)
+                sb.AppendLine($"| {EscapeMarkdown(a.AssignedTo)} | {EscapeMarkdown(a.Task)} | {EscapeMarkdown(a.Deadline ?? "—")} |");
+            sb.AppendLine();
+        }
+
+        // ── Full meeting record: transcripts + screenshots chronologically ──
+        if (s.HasTranscripts || s.HasScreenshots)
+        {
+            sb.AppendLine("## 会议记录");
+            sb.AppendLine();
+
+            var ti = 0;
+            var si = 0;
+
+            while (ti < s.Transcripts.Count || si < s.ScreenshotPaths.Count)
+            {
+                var haveTranscript = ti < s.Transcripts.Count;
+                var haveScreenshot = si < s.ScreenshotPaths.Count;
+
+                if (!haveScreenshot || (haveTranscript &&
+                    s.Transcripts[ti].Timestamp <= s.ScreenshotPaths[si].Timestamp))
+                {
+                    var tr = s.Transcripts[ti++];
+                    var speaker = string.IsNullOrEmpty(tr.Speaker) ? "" : $"**{tr.Speaker}**：";
+                    var text = tr.Text.Replace("\r\n", "  \n").Replace('\n', ' ').Replace('\r', ' ');
+                    sb.AppendLine($"**{tr.TimeLabel}** {speaker}{text}  ");
+                    sb.AppendLine();
+                }
+                else
+                {
+                    var shot = s.ScreenshotPaths[si++];
+                    if (screenshotMap.TryGetValue(shot.FilePath, out var relPath))
+                    {
+                        sb.AppendLine($"![{shot.TimeLabel} 截图]({assetRelDir}/{relPath})  ");
+                        var speakerNote = !string.IsNullOrWhiteSpace(shot.ActiveSpeakerName)
+                            ? $" — 发言人：{shot.ActiveSpeakerName}" : "";
+                        sb.AppendLine($"*{shot.TimeLabel} 截图{speakerNote}*  ");
+                        if (!string.IsNullOrWhiteSpace(shot.AiSummary))
+                            sb.AppendLine($"> {EscapeMarkdown(shot.AiSummary)}  ");
+                    }
+                    else
+                    {
+                        var speakerNote2 = !string.IsNullOrWhiteSpace(shot.ActiveSpeakerName)
+                            ? $" — 发言人：{shot.ActiveSpeakerName}" : "";
+                        sb.AppendLine($"> 📷 *{shot.TimeLabel} 截图（文件缺失）{speakerNote2}*  ");
+                        if (!string.IsNullOrWhiteSpace(shot.AiSummary))
+                            sb.AppendLine($"> {EscapeMarkdown(shot.AiSummary)}  ");
+                    }
+                    sb.AppendLine();
+                }
+            }
+        }
+
+        sb.AppendLine("---");
+        sb.AppendLine($"*由 MeetingQ 生成 — {DateTime.Now:yyyy-MM-dd HH:mm}*");
+        return sb.ToString();
+    }
+
+    private static string BuildHtml(SessionItem s, IReadOnlyDictionary<string, string?> dataUris)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("<!DOCTYPE html>");
+        sb.AppendLine("<html lang=\"zh-CN\">");
+        sb.AppendLine("<head>");
+        sb.AppendLine("<meta charset=\"UTF-8\">");
+        sb.AppendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
+        sb.AppendLine($"<title>会议纪要 — {EscapeHtml(s.Title)}</title>");
+        sb.AppendLine("<style>");
+        sb.AppendLine("  body { font-family: -apple-system, 'Microsoft YaHei', sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; line-height: 1.7; }");
+        sb.AppendLine("  h1 { border-bottom: 2px solid #2563eb; padding-bottom: 12px; }");
+        sb.AppendLine("  h2 { color: #2563eb; margin-top: 32px; }");
+        sb.AppendLine("  .meta { color: #6b7280; font-size: 14px; }");
+        sb.AppendLine("  .meta span { margin-right: 24px; }");
+        sb.AppendLine("  .transcript-entry { margin: 8px 0; padding: 6px 0; }");
+        sb.AppendLine("  .ts { color: #6b7280; font-size: 13px; font-weight: 600; }");
+        sb.AppendLine("  .speaker { color: #2563eb; font-weight: 600; }");
+        sb.AppendLine("  .screenshot-block { margin: 16px 0; }");
+        sb.AppendLine("  .screenshot-block img { max-width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }");
+        sb.AppendLine("  .screenshot-label { color: #9ca3af; font-size: 12px; margin-top: 4px; }");
+        sb.AppendLine("  table { border-collapse: collapse; width: 100%; }");
+        sb.AppendLine("  th, td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; }");
+        sb.AppendLine("  th { background: #f3f4f6; font-weight: 600; }");
+        sb.AppendLine("  ul { padding-left: 20px; }");
+        sb.AppendLine("  li { margin: 4px 0; }");
+        sb.AppendLine("  footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 13px; }");
+        sb.AppendLine("</style>");
+        sb.AppendLine("</head>");
+        sb.AppendLine("<body>");
+
+        sb.AppendLine($"<h1>会议纪要 — {EscapeHtml(s.Title)}</h1>");
+        sb.AppendLine("<p class=\"meta\">");
+        sb.AppendLine($"<span>日期：{s.StartTime:yyyy年MM月dd日 HH:mm}</span>");
+        sb.AppendLine($"<span>时长：{s.DurationLabel}</span>");
+        sb.AppendLine($"<span>转录条数：{s.TranscriptCount}</span>");
+        if (s.ScreenshotPaths.Count > 0)
+            sb.AppendLine($"<span>截图数：{s.ScreenshotPaths.Count}</span>");
+        sb.AppendLine("</p>");
+
+        // ── Overall meeting summary ──
+        if (!string.IsNullOrWhiteSpace(s.OverallSummary))
+        {
+            sb.AppendLine("<h2>会议总结</h2>");
+            sb.AppendLine($"<p>{EscapeHtml(s.OverallSummary)}</p>");
+        }
+
+        // ── Topic summaries ──
+        var summaryTextsHtml = s.TopicSummaries
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .ToList();
+        if (summaryTextsHtml.Count > 0)
+        {
+            sb.AppendLine("<h2>议题摘要</h2>");
+            foreach (var t in summaryTextsHtml)
+                sb.AppendLine($"<p>{EscapeHtml(t)}</p>");
+        }
+
+        // Topics
+        if (s.TopicTitles.Count > 0)
+        {
+            sb.AppendLine("<h2>议题</h2><ul>");
+            for (int i = 0; i < s.TopicTitles.Count; i++)
+            {
+                var summary = i < s.TopicSummaries.Count && !string.IsNullOrWhiteSpace(s.TopicSummaries[i])
+                    ? $" — {EscapeHtml(s.TopicSummaries[i])}"
+                    : "";
+                sb.AppendLine($"<li><strong>{EscapeHtml(s.TopicTitles[i])}</strong>{summary}</li>");
+            }
+            sb.AppendLine("</ul>");
+        }
+
+        // Decisions
+        if (s.HasDecisions)
+        {
+            sb.AppendLine("<h2>决策</h2><ul>");
+            foreach (var d in s.Decisions)
+                sb.AppendLine($"<li>{EscapeHtml(d)}</li>");
+            sb.AppendLine("</ul>");
+        }
+
+        // Action Items
+        if (s.HasActionItems)
+        {
+            sb.AppendLine("<h2>行动项</h2>");
+            sb.AppendLine("<table><thead><tr><th>负责人</th><th>任务</th><th>截止时间</th></tr></thead><tbody>");
+            foreach (var a in s.ActionItems)
+                sb.AppendLine($"<tr><td>{EscapeHtml(a.AssignedTo)}</td><td>{EscapeHtml(a.Task)}</td><td>{EscapeHtml(a.Deadline ?? "—")}</td></tr>");
+            sb.AppendLine("</tbody></table>");
+        }
+
+        // Full meeting record: transcripts + screenshots (at bottom)
+        if (s.HasTranscripts || s.HasScreenshots)
+        {
+            sb.AppendLine("<h2>会议记录</h2>");
+
+            var ti = 0;
+            var si = 0;
+            while (ti < s.Transcripts.Count || si < s.ScreenshotPaths.Count)
+            {
+                var haveTranscript = ti < s.Transcripts.Count;
+                var haveScreenshot = si < s.ScreenshotPaths.Count;
+
+                if (!haveScreenshot || (haveTranscript &&
+                    s.Transcripts[ti].Timestamp <= s.ScreenshotPaths[si].Timestamp))
+                {
+                    var tr = s.Transcripts[ti++];
+                    var speaker = string.IsNullOrEmpty(tr.Speaker)
+                        ? "" : $"<span class=\"speaker\">{EscapeHtml(tr.Speaker)}：</span>";
+                    sb.AppendLine($"<div class=\"transcript-entry\"><span class=\"ts\">{tr.TimeLabel}</span> {speaker}{EscapeHtml(tr.Text)}</div>");
+                }
+                else
+                {
+                    var shot = s.ScreenshotPaths[si++];
+                    dataUris.TryGetValue(shot.FilePath, out var dataUri);
+                    if (dataUri is not null)
+                    {
+                        sb.AppendLine("<div class=\"screenshot-block\">");
+                        sb.AppendLine($"<img src=\"{dataUri}\" alt=\"{shot.TimeLabel} 截图\" loading=\"lazy\">");
+                        var htmlSpeakerNote = !string.IsNullOrWhiteSpace(shot.ActiveSpeakerName)
+                            ? $" — 发言人：{EscapeHtml(shot.ActiveSpeakerName)}" : "";
+                        sb.AppendLine($"<div class=\"screenshot-label\">{shot.TimeLabel} 截图{htmlSpeakerNote}</div>");
+                        if (!string.IsNullOrWhiteSpace(shot.AiSummary))
+                            sb.AppendLine($"<p style=\"color:#6b7280;font-size:13px;margin-top:4px\">{EscapeHtml(shot.AiSummary)}</p>");
+                        sb.AppendLine("</div>");
+                    }
+                    else
+                    {
+                        var htmlSpeakerNote2 = !string.IsNullOrWhiteSpace(shot.ActiveSpeakerName)
+                            ? $" — 发言人：{EscapeHtml(shot.ActiveSpeakerName)}" : "";
+                        sb.AppendLine($"<div class=\"screenshot-block\"><p>📷 {shot.TimeLabel} 截图（文件缺失）{htmlSpeakerNote2}</p>");
+                        if (!string.IsNullOrWhiteSpace(shot.AiSummary))
+                            sb.AppendLine($"<p style=\"color:#6b7280;font-size:13px\">{EscapeHtml(shot.AiSummary)}</p>");
+                        sb.AppendLine("</div>");
+                    }
+                }
+            }
+        }
+
+        sb.AppendLine($"<footer>由 MeetingQ 生成 — {DateTime.Now:yyyy-MM-dd HH:mm}</footer>");
+        sb.AppendLine("</body></html>");
+        return sb.ToString();
+    }
+
+    private static string EscapeHtml(string text)
+    {
+        return text
+            .Replace("&", "&amp;")
+            .Replace("<", "&lt;")
+            .Replace(">", "&gt;")
+            .Replace("\"", "&quot;");
+    }
+}

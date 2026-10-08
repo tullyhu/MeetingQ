@@ -1,0 +1,77 @@
+<Window x:Class="MeetingQ.Views.PrivacyNoticeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="隐私说明"
+        Width="480" Height="420"
+        MinWidth="400" MinHeight="360"
+        WindowStyle="SingleBorderWindow"
+        ResizeMode="CanResizeWithGrip"
+        WindowStartupLocation="CenterScreen"
+        Background="#FFFFFF"
+        Foreground="#111111"
+        FontFamily="Segoe UI"
+        ShowInTaskbar="True">
+
+    <Grid Margin="32">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="🔒  隐私说明"
+                       Foreground="#6366F1"
+                       FontSize="18" FontWeight="SemiBold"
+                       Margin="0,0,0,10"/>
+            <Rectangle Height="1" Fill="#EEEEEE"/>
+        </StackPanel>
+
+        <!-- Content -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock TextWrapping="Wrap" FontSize="13" Foreground="#333333"
+                           LineHeight="22" Margin="0,0,0,14">
+MeetingQ 是一款<Bold>完全本地运行</Bold>的会议助理，请在使用前了解以下数据处理方式：
+                </TextBlock>
+
+                <TextBlock Text="📡  网络请求" Foreground="#2563EB" FontSize="12"
+                           FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#555555"
+                           LineHeight="20" Margin="0,0,0,14">
+会议语音在本机离线完成转写和说话人识别，不发送至任何语音识别服务器；仅转录文本会发送至大语言模型（LLM）生成摘要。所有 API Key 使用 Windows DPAPI 加密存储，不离开本机。
+                </TextBlock>
+
+                <TextBlock Text="💾  本地存储" Foreground="#2563EB" FontSize="12"
+                           FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#555555"
+                           LineHeight="20" Margin="0,0,0,14">
+转录文本、摘要、截图（JPEG）保存在本机 %LOCALAPPDATA%\MeetingQ\ 目录，不上传至任何服务器。
+                </TextBlock>
+
+                <TextBlock Text="🎤  采集范围" Foreground="#2563EB" FontSize="12"
+                           FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#555555"
+                           LineHeight="20">
+仅在您点击「开始监听」后采集系统扬声器输出（会议播放声音），不采集麦克风输入，不在后台静默录音。
+                </TextBlock>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Footer -->
+        <StackPanel Grid.Row="2" Margin="0,20,0,0">
+            <Rectangle Height="1" Fill="#EEEEEE" Margin="0,0,0,16"/>
+            <Button Content="我已阅读，开始使用"
+                    IsDefault="True"
+                    HorizontalAlignment="Right"
+                    Padding="24,9"
+                    FontSize="13" FontWeight="SemiBold"
+                    Background="#6366F1"
+                    Foreground="White"
+                    BorderThickness="0"
+                    Cursor="Hand"
+                    Click="AcceptButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

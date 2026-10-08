@@ -95,6 +95,8 @@ MeetingQ 就是为这一刻而生的：
 
 ## 快速开始
 
+> **Windows 用户**：Windows 版（WPF / sherpa-onnx 本地识别）源码在 [`windows/`](windows/) 子目录，编译好的单文件 exe 便携包在 [Releases](../../releases) 下载 `MeetingQ-x.x.x-win-x64.zip`。
+
 ### 方式一：下载 DMG（推荐）
 
 从 [Releases](../../releases) 下载 `MeetingQ-x.x.x.dmg`，拖入 Applications 即可。
