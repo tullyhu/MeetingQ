@@ -31,10 +31,10 @@ Libraries (NuGet packages)
 AI Models (bundled in the application package)
 ----------------------------------------------
 
-5. Paraformer streaming ASR model (Chinese, int8 ONNX)
-   Source: sherpa-onnx model hub / ModelScope
+5. Paraformer streaming ASR model (bilingual Chinese-English, int8 ONNX)
+   Source: sherpa-onnx model hub (csukuangfj/sherpa-onnx-streaming-paraformer-bilingual-zh-en)
    License: Apache License 2.0
-   https://k2-fsa.github.io/sherpa/onnx/
+   https://huggingface.co/csukuangfj/sherpa-onnx-streaming-paraformer-bilingual-zh-en
 
 6. pyannote-segmentation-3.0 (int8 ONNX)
    Author: pyannote.ai
