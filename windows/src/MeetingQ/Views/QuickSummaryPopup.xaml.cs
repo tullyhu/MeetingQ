@@ -1,3 +1,4 @@
+using MeetingQ.Infrastructure;
 using System.Windows;
 using System.Windows.Input;
 
@@ -67,7 +68,7 @@ public partial class QuickSummaryPopup : Window
     private async void CopyButton_Click(object sender, RoutedEventArgs e)
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"会议纪要 — {TopicTextBlock.Text}");
+        sb.AppendLine(LocalizationManager.Format("QuickSummaryCopyHeader", TopicTextBlock.Text));
         sb.AppendLine();
         sb.AppendLine(SummaryTextBlock.Text);
 
@@ -77,7 +78,7 @@ public partial class QuickSummaryPopup : Window
             if (list.Count > 0)
             {
                 sb.AppendLine();
-                sb.AppendLine("决策：");
+                sb.AppendLine(LocalizationManager.Get("QuickSummaryDecisionsColon"));
                 foreach (var d in list) sb.AppendLine($"• {d}");
             }
         }
@@ -88,7 +89,7 @@ public partial class QuickSummaryPopup : Window
             if (list.Count > 0)
             {
                 sb.AppendLine();
-                sb.AppendLine("行动项：");
+                sb.AppendLine(LocalizationManager.Get("QuickSummaryActionItemsColon"));
                 foreach (var a in list) sb.AppendLine($"→ {a}");
             }
         }
@@ -96,9 +97,9 @@ public partial class QuickSummaryPopup : Window
         Clipboard.SetText(sb.ToString());
 
         CopyButton.IsEnabled = false;
-        CopyButton.Content = "✓ 已复制";
+        CopyButton.Content = LocalizationManager.Get("QuickSummaryCopied");
         await Task.Delay(1500);
-        CopyButton.Content = "📋 复制摘要";
+        CopyButton.Content = LocalizationManager.Get("QuickSummaryCopy");
         CopyButton.IsEnabled = true;
     }
 

@@ -28,7 +28,9 @@ public partial class ScreenshotAlbumViewModel : ObservableObject
     private int _screenshotCount;
 
     public bool   HasScreenshots => ScreenshotCount > 0;
-    public string CountLabel     => ScreenshotCount == 0 ? "暂无截图" : $"{ScreenshotCount} 张";
+    public string CountLabel     => ScreenshotCount == 0
+        ? Infrastructure.LocalizationManager.Get("ShotNone")
+        : Infrastructure.LocalizationManager.Format("ShotCountFmt", ScreenshotCount);
 
     public ScreenshotAlbumViewModel(ILogger<ScreenshotAlbumViewModel> logger)
     {

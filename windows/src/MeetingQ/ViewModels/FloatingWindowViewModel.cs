@@ -41,10 +41,10 @@ public partial class FloatingWindowViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(RunSelfTestCommand))]
     [NotifyCanExecuteChangedFor(nameof(ManualTriggerAlertCommand))]
     private bool _isMonitoring;
-    [ObservableProperty] private string _currentTopic     = "（未开始）";
+    [ObservableProperty] private string _currentTopic     = LocalizationManager.Get("FloatTopicNotStarted");
     [ObservableProperty] private string _latestTranscript = string.Empty;
     [ObservableProperty] private string _elapsedTime      = "00:00:00";
-    [ObservableProperty] private string _statusText       = "就绪";
+    [ObservableProperty] private string _statusText       = LocalizationManager.Get("StatusReady");
 
     // ── Self-test ─────────────────────────────────────────────────────────
 
@@ -73,7 +73,7 @@ public partial class FloatingWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(MultimodalButtonText))]
     private bool _isMultimodalEnabled;
 
-    public string MultimodalButtonText => IsMultimodalEnabled ? "🖼多模态" : "🔘纯文本";
+    public string MultimodalButtonText => LocalizationManager.Get(IsMultimodalEnabled ? "FloatMultimodalOn" : "FloatMultimodalOff");
 
     // ── Diagnostics panel ────────────────────────────────────────────────
 
@@ -267,7 +267,7 @@ public partial class FloatingWindowViewModel : ObservableObject
         if (LlmProfileStore.GetActive() is null)
         {
             _logger.LogWarning("Cannot start — no active LLM profile");
-            StatusText = "请先在设置 → 大模型 中配置并激活一个接口";
+            StatusText = LocalizationManager.Get("FloatNeedLlmConfig");
             ConfigurationRequired?.Invoke();
             return;
         }
@@ -277,7 +277,7 @@ public partial class FloatingWindowViewModel : ObservableObject
         if (!windowValid)
         {
             _logger.LogInformation("Capture window '{Title}' not found — prompting user", CaptureWindowTitle);
-            StatusText = "请选择当前运行的会议窗口";
+            StatusText = LocalizationManager.Get("FloatNeedWindow");
             RefreshWindows();
             _pendingStartAfterWindowSelect = true;
             WindowSelectionRequired?.Invoke();
@@ -291,38 +291,38 @@ public partial class FloatingWindowViewModel : ObservableObject
         IsDiagnosticVisible = true;
 
         // ── Step 1: Audio device ──
-        _stepDevice!.SetRunning("检测音频设备...");
-        StatusText = "检测音频设备...";
+        _stepDevice!.SetRunning(LocalizationManager.Get("FloatDetectingAudio"));
+        StatusText = LocalizationManager.Get("FloatDetectingAudio");
         try
         {
             await _audioCapture.StartAsync();
-            var devName = _audioCapture.CurrentDeviceName ?? "默认播放设备";
+            var devName = _audioCapture.CurrentDeviceName ?? LocalizationManager.Get("FloatDefaultPlayback");
             _stepDevice.SetOk(devName);
             _logger.LogInformation("[Diag] Audio device: {Dev}", devName);
         }
         catch (Exception ex)
         {
             _stepDevice.SetError(ex.Message);
-            DiagnosticHint = "未找到播放设备，请检查声音设备设置";
-            StatusText = "音频设备错误";
+            DiagnosticHint = LocalizationManager.Get("FloatNoPlaybackDevice");
+            StatusText = LocalizationManager.Get("FloatAudioDeviceError");
             _logger.LogError(ex, "[Diag] Audio device failed");
             return;
         }
 
         // ── Step 2: ASR connection ──
-        _stepAsr!.SetRunning("连接 ASR 服务...");
-        StatusText = "连接 ASR...";
+        _stepAsr!.SetRunning(LocalizationManager.Get("FloatConnectingAsrService"));
+        StatusText = LocalizationManager.Get("FloatConnectingAsr");
         try
         {
             await _asr.ConnectAsync();
-            _stepAsr.SetOk("已连接");
+            _stepAsr.SetOk(LocalizationManager.Get("FloatConnected"));
             _logger.LogInformation("[Diag] ASR connected");
         }
         catch (Exception ex)
         {
             _stepAsr.SetError(ex.Message);
-            DiagnosticHint = "本地语音识别模型加载失败，请检查网络后重试（首次运行需下载模型）";
-            StatusText = "ASR 初始化失败";
+            DiagnosticHint = LocalizationManager.Get("FloatAsrModelLoadFailed");
+            StatusText = LocalizationManager.Get("FloatAsrInitFailed");
             _logger.LogError(ex, "[Diag] ASR connect failed");
             // Stop audio capture that already started
             await _audioCapture.StopAsync();
@@ -339,8 +339,8 @@ public partial class FloatingWindowViewModel : ObservableObject
         // ── Step 3 & 4: monitor audio signal and ASR result ──
         _audioSignalReceived = false;
         _transcriptReceived  = false;
-        _stepAudio!.SetRunning("等待声音...");
-        _stepTranscript!.SetRunning("等待转录...");
+        _stepAudio!.SetRunning(LocalizationManager.Get("FloatWaitingAudio"));
+        _stepTranscript!.SetRunning(LocalizationManager.Get("FloatWaitingTranscript"));
 
         // 10 s: if no audio signal by then → warn
         _audioCheckTimer = new System.Timers.Timer(10_000) { AutoReset = false };
@@ -348,8 +348,8 @@ public partial class FloatingWindowViewModel : ObservableObject
         {
             if (!_audioSignalReceived)
             {
-                _stepAudio!.SetWarning("静音 ⚠");
-                DiagnosticHint = "未检测到声音，请检查：\n① 系统音量未静音  ② 默认播放设备正确  ③ 正在播放音频";
+                _stepAudio!.SetWarning(LocalizationManager.Get("FloatMuted"));
+                DiagnosticHint = LocalizationManager.Get("FloatNoAudioHint");
                 _logger.LogWarning("[Diag] No audio signal in 10s");
             }
         };
@@ -361,9 +361,9 @@ public partial class FloatingWindowViewModel : ObservableObject
         {
             if (!_transcriptReceived)
             {
-                _stepTranscript!.SetWarning("30s 内无转录 ⚠");
+                _stepTranscript!.SetWarning(LocalizationManager.Get("FloatNoTranscript30"));
                 if (string.IsNullOrEmpty(DiagnosticHint))
-                    DiagnosticHint = "已收到音频但无文字，请检查：\n① 音频是否为清晰的语音 ② 音量是否过低 ③ 日志中是否有模型加载错误";
+                    DiagnosticHint = LocalizationManager.Get("FloatNoTranscriptHint");
                 _logger.LogWarning("[Diag] No transcript in 30s");
                 // Keep panel visible when there are warnings
                 IsDiagnosticVisible = true;
@@ -458,12 +458,12 @@ public partial class FloatingWindowViewModel : ObservableObject
 
         // ── Context manager ──
         _contextManager = new ContextWindowManager();
-        var sessionTitle = $"会议 {_startTime:MM-dd HH:mm}";
+        var sessionTitle = LocalizationManager.Format("MeetingTitleFmt", _startTime);
         _contextManager.SetMeetingTitle(sessionTitle);
 
         IsMonitoring   = true;
         HasSessionData = true;
-        StatusText     = "监听中";
+        StatusText     = LocalizationManager.Get("FloatListening");
         CurrentTopic   = "";
 
         // ── Screen capture ──
@@ -477,7 +477,7 @@ public partial class FloatingWindowViewModel : ObservableObject
                 var topicId   = _currentTopicId;
                 _ = Task.Run(() => SaveScreenshotAsync(sessionId, topicId, e));
             }
-            _contextManager?.AddTranscript(e.Timestamp.ToString("HH:mm:ss") + " [截图]");
+            _contextManager?.AddTranscript(e.Timestamp.ToString("HH:mm:ss") + LocalizationManager.Get("FloatScreenshotTag"));
 
             // Multimodal: trigger Vision analysis
             if (IsMultimodalEnabled && _vision is not null && _currentTopicId.HasValue)
@@ -678,7 +678,7 @@ public partial class FloatingWindowViewModel : ObservableObject
         _screenCapture.ShouldSkipPeriodicCapture = null;
 
         IsMonitoring = false;
-        StatusText   = "启动失败";
+        StatusText   = LocalizationManager.Get("FloatStartFailed");
     }
 
     private async Task CleanupAfterFailedStartAsync()
@@ -701,7 +701,7 @@ public partial class FloatingWindowViewModel : ObservableObject
         if (!IsMonitoring) return;
 
         _logger.LogInformation("Stopping listening session");
-        StatusText = "停止中...";
+        StatusText = LocalizationManager.Get("FloatStopping");
 
         _elapsedTimer?.Stop();
         _elapsedTimer = null;
@@ -750,8 +750,8 @@ public partial class FloatingWindowViewModel : ObservableObject
         }
 
         IsMonitoring = false;
-        StatusText   = "已停止";
-        CurrentTopic = "（已结束）";
+        StatusText   = LocalizationManager.Get("FloatStopped");
+        CurrentTopic = LocalizationManager.Get("FloatTopicEnded");
         LatestTranscript = string.Empty;
         InlineSummaryText = string.Empty;
         // Keep decisions/action items in memory — they are already persisted to DB
@@ -826,16 +826,16 @@ public partial class FloatingWindowViewModel : ObservableObject
         IsSelfTestRunning = true;
         SelfTestResult    = string.Empty;
         SelfTestPassed    = false;
-        StatusText        = "功能自检中...";
+        StatusText        = LocalizationManager.Get("FloatSelfTestRunning");
 
         // Reset the 4 standard steps and add 6 transient steps.
         ResetDiagnostics();
-        _stepPlay       = new DiagnosticItem { Name = "测试播报" };
-        _stepScreenshot = new DiagnosticItem { Name = "截图" };
-        _stepLlm        = new DiagnosticItem { Name = "LLM 摘要" };
-        _stepNameAlert  = new DiagnosticItem { Name = "被叫提醒" };
-        _stepVisionModel = new DiagnosticItem { Name = "Vision 模型" };
-        _stepVisionAnalysis = new DiagnosticItem { Name = "Vision 分析" };
+        _stepPlay       = new DiagnosticItem { Name = LocalizationManager.Get("DiagStepTestPlayback") };
+        _stepScreenshot = new DiagnosticItem { Name = LocalizationManager.Get("DiagStepScreenshot") };
+        _stepLlm        = new DiagnosticItem { Name = LocalizationManager.Get("DiagStepLlmSummary") };
+        _stepNameAlert  = new DiagnosticItem { Name = LocalizationManager.Get("DiagStepNameAlert") };
+        _stepVisionModel = new DiagnosticItem { Name = LocalizationManager.Get("DiagStepVisionModel") };
+        _stepVisionAnalysis = new DiagnosticItem { Name = LocalizationManager.Get("DiagStepVisionAnalysis") };
         DiagnosticSteps.Add(_stepPlay);
         DiagnosticSteps.Add(_stepScreenshot);
         DiagnosticSteps.Add(_stepLlm);
@@ -852,36 +852,36 @@ public partial class FloatingWindowViewModel : ObservableObject
         try
         {
             // ── Step 1: Audio device ──────────────────────────────────────
-            _stepDevice!.SetRunning("检测音频设备...");
+            _stepDevice!.SetRunning(LocalizationManager.Get("FloatDetectingAudio"));
             try
             {
                 await _audioCapture.StartAsync();
                 audioStarted = true;
-                _stepDevice.SetOk(_audioCapture.CurrentDeviceName ?? "默认播放设备");
+                _stepDevice.SetOk(_audioCapture.CurrentDeviceName ?? LocalizationManager.Get("FloatDefaultPlayback"));
             }
             catch (Exception ex)
             {
                 _stepDevice.SetError(ex.Message);
-                SelfTestResult = $"✕ 音频设备错误：{ex.Message}";
-                DiagnosticHint = "未找到播放设备，请检查系统声音设置";
+                SelfTestResult = LocalizationManager.Format("FloatErrAudioDeviceFmt", ex.Message);
+                DiagnosticHint = LocalizationManager.Get("FloatNoPlaybackDevice");
                 abortAsr = true;
             }
 
             // ── Step 2: ASR connection ────────────────────────────────────
             if (!abortAsr)
             {
-                _stepAsr!.SetRunning("连接 ASR 服务...");
+                _stepAsr!.SetRunning(LocalizationManager.Get("FloatConnectingAsrService"));
                 try
                 {
                     await _asr.ConnectAsync();
                     asrConnected = true;
-                    _stepAsr.SetOk("已连接");
+                    _stepAsr.SetOk(LocalizationManager.Get("FloatConnected"));
                 }
                 catch (Exception ex)
                 {
                     _stepAsr.SetError(ex.Message);
-                    SelfTestResult = $"✕ ASR 连接失败：{ex.Message}";
-                    DiagnosticHint = "请检查：① Access Token 是否有效 ② 网络是否可用";
+                    SelfTestResult = LocalizationManager.Format("FloatErrAsrConnectFmt", ex.Message);
+                    DiagnosticHint = LocalizationManager.Get("FloatAsrCheckHint");
                     abortAsr = true;
                 }
             }
@@ -893,30 +893,30 @@ public partial class FloatingWindowViewModel : ObservableObject
                 levelHandler = (_, rms) =>
                 {
                     if (_stepAudio?.State == DiagState.Running && rms > 0.005f)
-                        _stepAudio.SetOk($"有声音 ({rms:F3})");
+                        _stepAudio.SetOk(LocalizationManager.Format("FloatAudioLevelFmt", rms));
                 };
                 _audioCapture.AudioLevelUpdated += levelHandler;
 
-                _stepAudio!.SetRunning("等待声音...");
-                _stepTranscript!.SetRunning("等待转录...");
+                _stepAudio!.SetRunning(LocalizationManager.Get("FloatWaitingAudio"));
+                _stepTranscript!.SetRunning(LocalizationManager.Get("FloatWaitingTranscript"));
                 _selfTestTranscriptTcs = new TaskCompletionSource<string>(
                     TaskCreationOptions.RunContinuationsAsynchronously);
 
                 await Task.Delay(800);
 
-                _stepPlay.SetRunning("正在播放测试语音...");
+                _stepPlay.SetRunning(LocalizationManager.Get("FloatPlayingTestVoice"));
                 try
                 {
                     var (_, isZh) = await SelfTestAudio.SpeakAsync(_logger, CancellationToken.None);
-                    _stepPlay.SetOk(isZh ? "已播放" : "已播放（英文）");
+                    _stepPlay.SetOk(isZh ? LocalizationManager.Get("FloatPlayed") : LocalizationManager.Get("FloatPlayedEn"));
                     if (!isZh)
                         _logger.LogWarning("[SelfTest] No Chinese TTS voice");
                 }
                 catch (Exception ex)
                 {
                     _stepPlay.SetError(ex.Message);
-                    SelfTestResult = $"✕ 语音播放失败：{ex.Message}";
-                    DiagnosticHint = "请检查：控制面板 → 语音 → 文本转语音，预览是否有声音";
+                    SelfTestResult = LocalizationManager.Format("FloatErrTtsFmt", ex.Message);
+                    DiagnosticHint = LocalizationManager.Get("FloatTtsHint");
                     abortAsr = true;
                 }
 
@@ -926,15 +926,15 @@ public partial class FloatingWindowViewModel : ObservableObject
                     try { await _asr.FinalizeSegmentAsync(); }
                     catch (Exception ex) { _logger.LogWarning(ex, "[SelfTest] FinalizeSegmentAsync"); }
 
-                    _stepTranscript.SetRunning("等待 ASR 返回...");
+                    _stepTranscript.SetRunning(LocalizationManager.Get("FloatWaitingAsrReturn"));
                     var winner = await Task.WhenAny(_selfTestTranscriptTcs.Task, Task.Delay(8_000));
 
                     if (winner == _selfTestTranscriptTcs.Task)
                     {
                         var text = _selfTestTranscriptTcs.Task.Result;
-                        _stepTranscript.SetOk("转录正常");
+                        _stepTranscript.SetOk(LocalizationManager.Get("FloatTranscriptOk"));
                         SelfTestPassed = true;
-                        SelfTestResult = $"✓ ASR 自检通过 — 转录：{text}";
+                        SelfTestResult = LocalizationManager.Format("FloatAsrSelfTestPassFmt", text);
                         DiagnosticHint = string.Empty;
                         _logger.LogInformation("[SelfTest] ASR PASS: {Text}", text);
                     }
@@ -943,23 +943,16 @@ public partial class FloatingWindowViewModel : ObservableObject
                         bool audioOk = _stepAudio?.State == DiagState.OK;
                         if (!audioOk)
                         {
-                            _stepAudio!.SetError("未捕获到声音");
-                            _stepTranscript.SetWarning("未到达 ASR");
-                            SelfTestResult = "✕ WASAPI 环回未能捕获播放声音";
-                            DiagnosticHint = "软件已播放测试语音，但麦克风环回无信号。\n" +
-                                             "请检查：\n" +
-                                             "① 系统音量未静音\n" +
-                                             "② 默认播放设备设置正确\n" +
-                                             "③ 驱动支持 WASAPI 环回（虚拟机/远程桌面不支持）";
+                            _stepAudio!.SetError(LocalizationManager.Get("FloatNoAudioCaptured"));
+                            _stepTranscript.SetWarning(LocalizationManager.Get("FloatNotReachedAsr"));
+                            SelfTestResult = LocalizationManager.Get("FloatWasapiFail");
+                            DiagnosticHint = LocalizationManager.Get("FloatWasapiHint");
                         }
                         else
                         {
-                            _stepTranscript.SetError("无 ASR 响应");
-                            SelfTestResult = "✕ 音频已捕获，但 ASR 无返回";
-                            DiagnosticHint = "请检查：\n" +
-                                             "① ASR AppID / Token 与集群是否匹配\n" +
-                                             "② 防火墙未拦截 AST WebSocket 连接\n" +
-                                             "③ ASR 账户是否有 bigmodel 权限";
+                            _stepTranscript.SetError(LocalizationManager.Get("FloatNoAsrResponse"));
+                            SelfTestResult = LocalizationManager.Get("FloatAsrNoReturn");
+                            DiagnosticHint = LocalizationManager.Get("FloatAsrNoReturnHint");
                         }
                         _logger.LogWarning("[SelfTest] ASR FAIL — audioOk={AudioOk}", audioOk);
                     }
@@ -969,19 +962,19 @@ public partial class FloatingWindowViewModel : ObservableObject
             if (abortAsr)
             {
                 // Mark un-started ASR steps as skipped so they don't stay Pending
-                if (_stepAsr?.State        == DiagState.Pending) _stepAsr.SetWarning("已跳过");
-                if (_stepAudio?.State      == DiagState.Pending) _stepAudio.SetWarning("已跳过");
-                if (_stepTranscript?.State == DiagState.Pending) _stepTranscript.SetWarning("已跳过");
-                if (_stepPlay?.State       == DiagState.Pending) _stepPlay.SetWarning("已跳过");
+                if (_stepAsr?.State        == DiagState.Pending) _stepAsr.SetWarning(LocalizationManager.Get("FloatSkipped"));
+                if (_stepAudio?.State      == DiagState.Pending) _stepAudio.SetWarning(LocalizationManager.Get("FloatSkipped"));
+                if (_stepTranscript?.State == DiagState.Pending) _stepTranscript.SetWarning(LocalizationManager.Get("FloatSkipped"));
+                if (_stepPlay?.State       == DiagState.Pending) _stepPlay.SetWarning(LocalizationManager.Get("FloatSkipped"));
             }
 
             // ── Step 6: Screenshot ────────────────────────────────────────
             string? selfTestScreenshotPath = null;
-            _stepScreenshot!.SetRunning("截图中...");
+            _stepScreenshot!.SetRunning(LocalizationManager.Get("FloatCapturing"));
             try
             {
                 selfTestScreenshotPath = await _screenCapture.TakeScreenshotAsync();
-                _stepScreenshot.SetOk("已保存");
+                _stepScreenshot.SetOk(LocalizationManager.Get("FloatSaved"));
                 _logger.LogInformation("[SelfTest] Screenshot: {Path}", selfTestScreenshotPath);
             }
             catch (Exception ex)
@@ -991,18 +984,22 @@ public partial class FloatingWindowViewModel : ObservableObject
             }
 
             // ── Step 7: LLM 摘要 ─────────────────────────────────────────
-            _stepLlm!.SetRunning("调用 LLM...");
+            _stepLlm!.SetRunning(LocalizationManager.Get("FloatCallingLlm"));
             try
             {
                 using var cts  = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-                var reply      = await _llm.AnalyzeAsync("请用一句话回复\"LLM摘要连接正常\"", cts.Token);
+                var reply      = await _llm.AnalyzeAsync(
+                    LocalizationManager.Instance.IsEnglish
+                        ? "Reply with exactly one sentence: \"LLM summary connection OK\""
+                        : "请用一句话回复\"LLM摘要连接正常\"",
+                    cts.Token);
                 var preview    = reply.Length > 24 ? reply[..24] + "…" : reply;
                 _stepLlm.SetOk(preview);
                 _logger.LogInformation("[SelfTest] LLM reply: {Reply}", reply);
             }
             catch (OperationCanceledException)
             {
-                _stepLlm.SetError("超时（15s）");
+                _stepLlm.SetError(LocalizationManager.Get("FloatTimeout15"));
                 _logger.LogWarning("[SelfTest] LLM timeout");
             }
             catch (Exception ex)
@@ -1012,31 +1009,33 @@ public partial class FloatingWindowViewModel : ObservableObject
             }
 
             // ── Step 8: 被叫提醒 ──────────────────────────────────────────
-            _stepNameAlert!.SetRunning("触发提醒...");
+            _stepNameAlert!.SetRunning(LocalizationManager.Get("FloatTriggeringAlert"));
             var userName = SecureStorage.Load(SecureStorageKeys.UserName)?.Trim();
-            if (string.IsNullOrEmpty(userName)) userName = "用户";
+            if (string.IsNullOrEmpty(userName)) userName = LocalizationManager.Get("FloatUser");
+            var isEn = LocalizationManager.Instance.IsEnglish;
             System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
                 NameDetected?.Invoke(
-                    $"[自检] 请问{userName}，你觉得这个方案怎么样？",
-                    new[] { "你觉得这个方案怎么样？" },
+                    isEn ? $"[Self-test] {userName}, what do you think of this plan?"
+                         : $"[自检] 请问{userName}，你觉得这个方案怎么样？",
+                    new[] { isEn ? "What do you think of this plan?" : "你觉得这个方案怎么样？" },
                     DateTime.Now,
-                    new[] { "[功能自检] 测试被叫到姓名提醒弹窗" },
+                    new[] { isEn ? "[Self-test] Testing name-call alert popup" : "[功能自检] 测试被叫到姓名提醒弹窗" },
                     selfTestScreenshotPath));
-            _stepNameAlert.SetOk("弹窗已触发");
+            _stepNameAlert.SetOk(LocalizationManager.Get("FloatPopupTriggered"));
             _logger.LogInformation("[SelfTest] NameAlert triggered for '{Name}'", userName);
 
             // ── Step 9: Vision 模型连接 (仅多模态模式) ──────────────────────
             if (_vision is not null && IsMultimodalEnabled)
             {
-                _stepVisionModel!.SetRunning("测试 Vision 连接...");
+                _stepVisionModel!.SetRunning(LocalizationManager.Get("FloatTestingVisionConn"));
                 try
                 {
                     var ok = await _vision.TestConnectionAsync();
                     if (ok)
-                        _stepVisionModel.SetOk("Vision 模型可用");
+                        _stepVisionModel.SetOk(LocalizationManager.Get("FloatVisionOk"));
                     else
                     {
-                        _stepVisionModel.SetWarning("Vision 模型无响应 ⚠");
+                        _stepVisionModel.SetWarning(LocalizationManager.Get("FloatVisionNoResponse"));
                         _logger.LogWarning("[SelfTest] Vision connection returned false");
                     }
                 }
@@ -1047,55 +1046,59 @@ public partial class FloatingWindowViewModel : ObservableObject
                 }
 
                 // ── Step 10: Vision 分析测试 ────────────────────────────────
-                _stepVisionAnalysis!.SetRunning("测试截图分析...");
+                _stepVisionAnalysis!.SetRunning(LocalizationManager.Get("FloatTestingVisionAnalysis"));
                 try
                 {
                     if (selfTestScreenshotPath is not null && File.Exists(selfTestScreenshotPath))
                     {
                         var result = await _vision.AnalyzeScreenshotAsync(
-                            selfTestScreenshotPath, "[自检]", new List<string>());
+                            selfTestScreenshotPath,
+                            LocalizationManager.Instance.IsEnglish ? "[Self-test]" : "[自检]",
+                            new List<string>());
+                        // "[分析失败"/"[分析超时"/"[模型未返回"/"[响应解析失败" are internal
+                        // codes produced by VisionService — language-neutral, do not localize.
                         if (!string.IsNullOrWhiteSpace(result.AiSummary) &&
                             !result.AiSummary.StartsWith("[分析失败") &&
                             !result.AiSummary.StartsWith("[分析超时") &&
                             !result.AiSummary.StartsWith("[模型未返回") &&
                             !result.AiSummary.StartsWith("[响应解析失败"))
                         {
-                            _stepVisionAnalysis.SetOk("分析正常");
+                            _stepVisionAnalysis.SetOk(LocalizationManager.Get("FloatAnalysisOk"));
                             _logger.LogInformation("[SelfTest] Vision analysis: {Summary}", result.AiSummary);
                         }
                         else
                         {
                             var reason = string.IsNullOrWhiteSpace(result.AiSummary)
-                                ? "空响应" : result.AiSummary.Trim('[', ']');
-                            _stepVisionAnalysis.SetWarning($"分析未返回有效内容 ({reason}) ⚠");
+                                ? LocalizationManager.Get("FloatEmptyResponse") : result.AiSummary.Trim('[', ']');
+                            _stepVisionAnalysis.SetWarning(LocalizationManager.Format("FloatAnalysisInvalidFmt", reason));
                             _logger.LogWarning("[SelfTest] Vision analysis failed: {Summary}", result.AiSummary);
-                            DiagnosticHint = "Vision 分析失败：请确认设置的模型支持多模态（如 gpt-4o、qwen-vl、claude-sonnet等），且已在设置页配置正确的 Vision 模型 ID。";
+                            DiagnosticHint = LocalizationManager.Get("FloatVisionFailHint");
                         }
                     }
                     else
                     {
-                        _stepVisionAnalysis.SetWarning("无测试截图");
+                        _stepVisionAnalysis.SetWarning(LocalizationManager.Get("FloatNoTestScreenshot"));
                     }
                 }
                 catch (Exception ex)
                 {
-                    _stepVisionAnalysis.SetWarning($"分析测试异常: {ex.Message}");
+                    _stepVisionAnalysis.SetWarning(LocalizationManager.Format("FloatAnalysisTestErrorFmt", ex.Message));
                     _logger.LogWarning(ex, "[SelfTest] Vision analysis test failed");
                 }
             }
             else if (_stepVisionModel is not null)
             {
-                _stepVisionModel.SetOk("已跳过 (纯文本模式)");
-                _stepVisionModel.Detail = "启用多模态后可测试";
-                _stepVisionAnalysis!.SetOk("已跳过 (纯文本模式)");
-                _stepVisionAnalysis.Detail = "启用多模态后可测试";
+                _stepVisionModel.SetOk(LocalizationManager.Get("FloatSkippedTextMode"));
+                _stepVisionModel.Detail = LocalizationManager.Get("FloatEnableMultimodalHint");
+                _stepVisionAnalysis!.SetOk(LocalizationManager.Get("FloatSkippedTextMode"));
+                _stepVisionAnalysis.Detail = LocalizationManager.Get("FloatEnableMultimodalHint");
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[SelfTest] Unexpected error");
-            SelfTestResult = $"✕ 自检意外错误：{ex.Message}";
-            DiagnosticHint = "请查看应用日志获取详情";
+            SelfTestResult = LocalizationManager.Format("FloatSelfTestErrorFmt", ex.Message);
+            DiagnosticHint = LocalizationManager.Get("FloatSeeLogHint");
         }
         finally
         {
@@ -1114,17 +1117,17 @@ public partial class FloatingWindowViewModel : ObservableObject
 
         _selfTestTranscriptTcs = null;
         IsSelfTestRunning      = false;
-        StatusText             = "就绪";
+        StatusText             = LocalizationManager.Get("StatusReady");
     }
 
     // ── Diagnostic helpers ────────────────────────────────────────────────
 
     private void InitDiagnosticSteps()
     {
-        _stepDevice     = new DiagnosticItem { Name = "音频设备" };
-        _stepAsr        = new DiagnosticItem { Name = "ASR 连接" };
-        _stepAudio      = new DiagnosticItem { Name = "音频信号" };
-        _stepTranscript = new DiagnosticItem { Name = "转录识别" };
+        _stepDevice     = new DiagnosticItem { Name = LocalizationManager.Get("DiagStepAudioDevice") };
+        _stepAsr        = new DiagnosticItem { Name = LocalizationManager.Get("DiagStepAsrConn") };
+        _stepAudio      = new DiagnosticItem { Name = LocalizationManager.Get("DiagStepAudioSignal") };
+        _stepTranscript = new DiagnosticItem { Name = LocalizationManager.Get("DiagStepTranscription") };
 
         DiagnosticSteps.Clear();
         DiagnosticSteps.Add(_stepDevice);
@@ -1162,8 +1165,8 @@ public partial class FloatingWindowViewModel : ObservableObject
         {
             _audioSignalReceived = true;
             _audioCheckTimer?.Stop();
-            _stepAudio.SetOk($"有声音 ({rms:F3})");
-            if (DiagnosticHint.Contains("未检测到声音"))
+            _stepAudio.SetOk(LocalizationManager.Format("FloatAudioLevelFmt", rms));
+            if (DiagnosticHint == LocalizationManager.Get("FloatNoAudioHint"))
                 DiagnosticHint = string.Empty;
             TryAutoHideDiagnostics();
         }
@@ -1175,7 +1178,7 @@ public partial class FloatingWindowViewModel : ObservableObject
             if ((now - _lastAudioDetailUpdateAt).TotalMilliseconds >= 200)
             {
                 _lastAudioDetailUpdateAt = now;
-                _stepAudio.Detail = $"有声音 ({rms:F3})";
+                _stepAudio.Detail = LocalizationManager.Format("FloatAudioLevelFmt", rms);
             }
         }
     }
@@ -1233,21 +1236,41 @@ public partial class FloatingWindowViewModel : ObservableObject
             string[] questions;
             try
             {
-                var userName = SecureStorage.Load(SecureStorageKeys.UserName)?.Trim() ?? "用户";
+                var userName = SecureStorage.Load(SecureStorageKeys.UserName)?.Trim() ?? LocalizationManager.Get("FloatUser");
                 var userRole = SecureStorage.Load(SecureStorageKeys.UserRole)?.Trim();
-                var roleHint = string.IsNullOrEmpty(userRole) ? string.Empty
-                    : $"\n用户角色：{userRole}";
-                var prompt =
-                    $$"""
-                    用户姓名：{{userName}}{{roleHint}}
+                string prompt;
+                if (LocalizationManager.Instance.IsEnglish)
+                {
+                    var roleHintEn = string.IsNullOrEmpty(userRole) ? string.Empty
+                        : $"\nUser role: {userRole}";
+                    prompt =
+                        $$"""
+                        User name: {{userName}}{{roleHintEn}}
 
-                    以下是会议最近的转录文本（每行一条）：
-                    {{contextText}}
+                        Below are the most recent meeting transcript lines (one per line):
+                        {{contextText}}
 
-                    请从上述文本中提取最近向该用户提出的问题或需要该用户回应的事项。
-                    只返回JSON，格式：{"questions":["问题1","问题2"]}
-                    若没有明确问题，返回：{"questions":["（请确认刚才被提及的内容）"]}
-                    """;
+                        Extract the most recent questions addressed to this user, or matters requiring this user's response.
+                        Return JSON only, format: {"questions":["question1","question2"]}
+                        If there is no clear question, return: {"questions":["(Please confirm what was just mentioned)"]}
+                        """;
+                }
+                else
+                {
+                    var roleHint = string.IsNullOrEmpty(userRole) ? string.Empty
+                        : $"\n用户角色：{userRole}";
+                    prompt =
+                        $$"""
+                        用户姓名：{{userName}}{{roleHint}}
+
+                        以下是会议最近的转录文本（每行一条）：
+                        {{contextText}}
+
+                        请从上述文本中提取最近向该用户提出的问题或需要该用户回应的事项。
+                        只返回JSON，格式：{"questions":["问题1","问题2"]}
+                        若没有明确问题，返回：{"questions":["（请确认刚才被提及的内容）"]}
+                        """;
+                }
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(12));
                 var reply     = await _llm.AnalyzeAsync(prompt, cts.Token);
                 var j         = System.Text.Json.JsonDocument.Parse(
@@ -1262,13 +1285,13 @@ public partial class FloatingWindowViewModel : ObservableObject
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "[ManualAlert] LLM question extraction failed");
-                questions = new[] { "（请确认刚才被提及的内容）" };
+                questions = new[] { LocalizationManager.Get("FloatConfirmMentioned") };
             }
 
             // Pick the most recent transcript line as the "original text"
             var originalText = recent.Count > 0
                 ? recent[^1].Text
-                : "（手动触发）";
+                : LocalizationManager.Get("FloatManualTrigger");
 
             _ = Application.Current?.Dispatcher.BeginInvoke(() =>
                 NameDetected?.Invoke(originalText, questions, triggeredAt,
@@ -1302,9 +1325,9 @@ public partial class FloatingWindowViewModel : ObservableObject
             {
                 Application.Current?.Dispatcher.Invoke(() =>
                 {
-                    _quickSummaryPopup.ShowContent(CurrentTopic, "暂无会议内容", Array.Empty<string>());
+                    _quickSummaryPopup.ShowContent(CurrentTopic, LocalizationManager.Get("FloatNoMeetingContent"), Array.Empty<string>());
                     IsInlineSummaryLoading = false;
-                    InlineSummaryText = "（暂无转写内容）";
+                    InlineSummaryText = LocalizationManager.Get("FloatNoTranscriptYet");
                 });
                 return;
             }
@@ -1353,10 +1376,11 @@ public partial class FloatingWindowViewModel : ObservableObject
             string[] allDecisions;
             string[] allActionStrings;
             lock (_decisionsLock)   allDecisions     = _currentDecisions.ToArray();
+            var isEnUi = LocalizationManager.Instance.IsEnglish;
             lock (_actionItemsLock) allActionStrings = _currentActionItems
                 .Select(a => string.IsNullOrEmpty(a.Deadline)
-                    ? $"{a.AssignedTo}：{a.Task}"
-                    : $"{a.AssignedTo}：{a.Task}（{a.Deadline}）")
+                    ? (isEnUi ? $"{a.AssignedTo}: {a.Task}" : $"{a.AssignedTo}：{a.Task}")
+                    : (isEnUi ? $"{a.AssignedTo}: {a.Task} ({a.Deadline})" : $"{a.AssignedTo}：{a.Task}（{a.Deadline}）"))
                 .ToArray();
 
             Application.Current?.Dispatcher.Invoke(() =>
@@ -1369,7 +1393,7 @@ public partial class FloatingWindowViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "ShowQuickSummary failed");
-            var errMsg = $"摘要生成失败：{ex.Message}";
+            var errMsg = LocalizationManager.Format("FloatSummaryFailFmt", ex.Message);
             Application.Current?.Dispatcher.Invoke(() =>
             {
                 _quickSummaryPopup.ShowContent(CurrentTopic, errMsg, Array.Empty<string>());
@@ -1406,7 +1430,7 @@ public partial class FloatingWindowViewModel : ObservableObject
             _ = Application.Current?.Dispatcher.BeginInvoke(() =>
             {
                 IsInlineSummaryLoading = false;
-                InlineSummaryText = $"[摘要生成失败：{ex.Message}]";
+                InlineSummaryText = LocalizationManager.Format("FloatSummaryFailBracketFmt", ex.Message);
             });
         }
     }
@@ -1416,10 +1440,39 @@ public partial class FloatingWindowViewModel : ObservableObject
                                               IReadOnlyList<ScreenshotSummary>? screenshotSummaries = null)
     {
         var joined   = string.Join("\n", transcripts);
+        var screenshotSection = BuildScreenshotSection(screenshotSummaries);
+
+        if (LocalizationManager.Instance.IsEnglish)
+        {
+            var roleHintEn = string.IsNullOrWhiteSpace(userRole) ? string.Empty
+                : $"\n(Current user role: {userRole} — pay special attention to content related to this role in the summary and action items)";
+
+            return detailed
+                ? $$"""
+                   Analyze the following meeting transcript and return JSON in this format:
+                   {"summary":"key-points summary (2-5 sentences)","decisions":["decision1","decision2"],"actions":[{"assignedTo":"owner","task":"specific task","deadline":"deadline or null"}]}
+
+                   decisions: only explicit decisions; actions: only action items with a clear owner.
+                   Return empty arrays if none. Return JSON only, no Markdown.{{roleHintEn}}
+
+                   Transcript:
+                   {{joined}}
+                   {{screenshotSection}}
+                   """
+                : $$"""
+                   Summarize the key points of the following meeting discussion in 2-3 sentences, returned as JSON:
+                   {"summary":"brief summary","decisions":[],"actions":[]}
+
+                   Return JSON only, no Markdown.{{roleHintEn}}
+
+                   Transcript:
+                   {{joined}}
+                   {{screenshotSection}}
+                   """;
+        }
+
         var roleHint = string.IsNullOrWhiteSpace(userRole) ? string.Empty
             : $"\n（当前用户角色：{userRole}，请在摘要和行动项中特别关注与该角色相关的内容）";
-
-        var screenshotSection = BuildScreenshotSection(screenshotSummaries);
 
         return detailed
             ? $$"""
@@ -1450,7 +1503,9 @@ public partial class FloatingWindowViewModel : ObservableObject
         if (screenshots is null or { Count: 0 }) return string.Empty;
         var sb = new System.Text.StringBuilder();
         sb.AppendLine();
-        sb.AppendLine("【截图内容分析】（会议期间屏幕展示的内容）");
+        sb.AppendLine(LocalizationManager.Instance.IsEnglish
+            ? "[Screenshot Content Analysis] (content shown on screen during the meeting)"
+            : "【截图内容分析】（会议期间屏幕展示的内容）");
         foreach (var s in screenshots)
             sb.AppendLine($"[{s.TimeLabel}] {s.AiSummary}");
         return sb.ToString();
@@ -1638,12 +1693,12 @@ public partial class FloatingWindowViewModel : ObservableObject
         System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
         {
             _stepAsr?.SetError(message);
-            _stepTranscript?.SetError("ASR 服务端错误");
+            _stepTranscript?.SetError(LocalizationManager.Get("FloatAsrServerError"));
             DiagnosticHint = isAuthError
-                ? "鉴权失败 — 请检查：① App ID ② Access Token ③ Resource ID 是否匹配"
-                : "服务器返回错误，尝试重连中…";
+                ? LocalizationManager.Get("FloatAsrAuthHint")
+                : LocalizationManager.Get("FloatAsrReconnectingHint");
             IsDiagnosticVisible = true;
-            StatusText = "ASR 错误";
+            StatusText = LocalizationManager.Get("FloatAsrError");
         });
 
         // For non-auth errors while monitoring, attempt to re-establish the connection.
@@ -1662,9 +1717,9 @@ public partial class FloatingWindowViewModel : ObservableObject
                     _logger.LogInformation("[ASR] Reconnected after server error");
                     System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
                     {
-                        _stepAsr?.SetOk("已重连");
+                        _stepAsr?.SetOk(LocalizationManager.Get("FloatReconnected"));
                         DiagnosticHint = string.Empty;
-                        StatusText = "监听中";
+                        StatusText = LocalizationManager.Get("FloatListening");
                     });
                 }
                 catch (Exception ex)
@@ -1781,7 +1836,7 @@ public partial class FloatingWindowViewModel : ObservableObject
         {
             _transcriptReceived = true;
             _transcriptCheckTimer?.Stop();
-            _stepTranscript?.SetOk("转录正常");
+            _stepTranscript?.SetOk(LocalizationManager.Get("FloatTranscriptOk"));
             DiagnosticHint = string.Empty;
             TryAutoHideDiagnostics();
         }
@@ -1914,7 +1969,9 @@ public partial class FloatingWindowViewModel : ObservableObject
             var recent = GetRecentTranscripts(30);
             if (recent.Count < 5) { _topicDetecting = false; return; }
 
-            var prompt = $"根据以下会议对话，用不超过10个字总结当前讨论的核心议题，只返回议题名称：\n{string.Join("\n", recent)}";
+            var prompt = LocalizationManager.Instance.IsEnglish
+                ? $"Based on the following meeting dialogue, summarize the core topic currently being discussed in no more than 6 words; return only the topic name:\n{string.Join("\n", recent)}"
+                : $"根据以下会议对话，用不超过10个字总结当前讨论的核心议题，只返回议题名称：\n{string.Join("\n", recent)}";
             var topic  = (await _llm.AnalyzeAsync(prompt)).Trim().Trim('"').Trim('。').Trim();
 
             if (string.IsNullOrWhiteSpace(topic) || topic.Length > 20) { _topicDetecting = false; return; }
@@ -2081,19 +2138,26 @@ public partial class FloatingWindowViewModel : ObservableObject
         List<Decision> decisions, List<ActionItem> actions, List<Screenshot> screenshots)
     {
         var sb = new System.Text.StringBuilder();
+        var isEn = LocalizationManager.Instance.IsEnglish;
 
-        sb.AppendLine("你是会议记录助手。请为以下会议议题生成简洁摘要。");
+        sb.AppendLine(isEn
+            ? "You are a meeting-minutes assistant. Generate a concise summary for the following meeting topic. Respond in English."
+            : "你是会议记录助手。请为以下会议议题生成简洁摘要。");
         sb.AppendLine();
-        sb.AppendLine($"议题标题：{topic.Title}");
-        sb.AppendLine($"时间范围：{topic.StartTime:HH:mm} - {(topic.EndTime?.ToString("HH:mm") ?? "至今")}");
+        sb.AppendLine(isEn
+            ? $"Topic title: {topic.Title}"
+            : $"议题标题：{topic.Title}");
+        sb.AppendLine(isEn
+            ? $"Time range: {topic.StartTime:HH:mm} - {(topic.EndTime?.ToString("HH:mm") ?? "now")}"
+            : $"时间范围：{topic.StartTime:HH:mm} - {(topic.EndTime?.ToString("HH:mm") ?? "至今")}");
         sb.AppendLine();
-        sb.AppendLine("【对话转录】");
+        sb.AppendLine(isEn ? "[Transcript]" : "【对话转录】");
         sb.AppendLine(string.Join("\n", transcripts));
         sb.AppendLine();
 
         if (decisions.Count > 0)
         {
-            sb.AppendLine("【相关决策】");
+            sb.AppendLine(isEn ? "[Related decisions]" : "【相关决策】");
             foreach (var d in decisions)
                 sb.AppendLine($"- {d.DecisionText}");
             sb.AppendLine();
@@ -2101,29 +2165,41 @@ public partial class FloatingWindowViewModel : ObservableObject
 
         if (actions.Count > 0)
         {
-            sb.AppendLine("【相关行动项】");
+            sb.AppendLine(isEn ? "[Related action items]" : "【相关行动项】");
             foreach (var a in actions)
-                sb.AppendLine($"- {a.AssignedTo}：{a.Task}" + (a.Deadline is not null ? $"（{a.Deadline}）" : ""));
+                sb.AppendLine($"- {a.AssignedTo}: {a.Task}" + (a.Deadline is not null ? $" ({a.Deadline})" : ""));
             sb.AppendLine();
         }
 
         if (screenshots.Count > 0)
         {
-            sb.AppendLine("【屏幕内容分析】");
+            sb.AppendLine(isEn ? "[Screen content analysis]" : "【屏幕内容分析】");
             foreach (var s in screenshots.Take(5))
             {
                 var summary = s.AISummary ?? "";
                 var ocr = s.OcrText ?? "";
-                var type = s.ContentType ?? "未知";
-                sb.AppendLine($"[{s.Timestamp:HH:mm:ss}] 类型：{type} | 内容：{summary}" +
-                    (string.IsNullOrWhiteSpace(ocr) ? "" : $" | OCR：{ocr}"));
+                var type = s.ContentType ?? (isEn ? "Unknown" : "未知");
+                sb.AppendLine(isEn
+                    ? $"[{s.Timestamp:HH:mm:ss}] Type: {type} | Content: {summary}" +
+                      (string.IsNullOrWhiteSpace(ocr) ? "" : $" | OCR: {ocr}")
+                    : $"[{s.Timestamp:HH:mm:ss}] 类型：{type} | 内容：{summary}" +
+                      (string.IsNullOrWhiteSpace(ocr) ? "" : $" | OCR：{ocr}"));
             }
             sb.AppendLine();
         }
 
-        sb.AppendLine("请用JSON格式返回：");
-        sb.AppendLine("{\"summary\":\"用2-4句话总结该议题的核心讨论内容、关键结论和后续行动\"}");
-        sb.AppendLine("只返回JSON，不要Markdown标记。");
+        if (isEn)
+        {
+            sb.AppendLine("Return JSON in this format:");
+            sb.AppendLine("{\"summary\":\"Summarize the core discussion, key conclusions and follow-up actions of this topic in 2-4 sentences\"}");
+            sb.AppendLine("Return JSON only, no Markdown.");
+        }
+        else
+        {
+            sb.AppendLine("请用JSON格式返回：");
+            sb.AppendLine("{\"summary\":\"用2-4句话总结该议题的核心讨论内容、关键结论和后续行动\"}");
+            sb.AppendLine("只返回JSON，不要Markdown标记。");
+        }
 
         return sb.ToString();
     }
@@ -2141,14 +2217,23 @@ public partial class FloatingWindowViewModel : ObservableObject
             var recent = GetRecentTranscripts(40);
             if (recent.Count < 8) return;
 
-            var prompt = $$"""
-                从以下会议对话中提取明确的决策结论和有明确负责人的行动项，以JSON格式返回：
-                {"decisions":["决策1"],"actions":[{"assignedTo":"负责人","task":"任务","deadline":"截止时间或null"}]}
-                若无则返回空数组。只返回JSON，不要Markdown。
+            var prompt = LocalizationManager.Instance.IsEnglish
+                ? $$"""
+                    Extract explicit decisions and action items with a clear owner from the following meeting dialogue, returned as JSON:
+                    {"decisions":["decision1"],"actions":[{"assignedTo":"owner","task":"task","deadline":"deadline or null"}]}
+                    Return empty arrays if none. Return JSON only, no Markdown.
 
-                转录内容：
-                {{string.Join("\n", recent)}}
-                """;
+                    Transcript:
+                    {{string.Join("\n", recent)}}
+                    """
+                : $$"""
+                    从以下会议对话中提取明确的决策结论和有明确负责人的行动项，以JSON格式返回：
+                    {"decisions":["决策1"],"actions":[{"assignedTo":"负责人","task":"任务","deadline":"截止时间或null"}]}
+                    若无则返回空数组。只返回JSON，不要Markdown。
+
+                    转录内容：
+                    {{string.Join("\n", recent)}}
+                    """;
 
             var response = await _llm.AnalyzeAsync(prompt);
             ParseSummaryJson(response, out _, out var decisions, out var actions);
@@ -2256,7 +2341,7 @@ public partial class FloatingWindowViewModel : ObservableObject
             {
                 StartTime = startTime,
                 Status    = SessionStatus.Monitoring,
-                Title     = $"会议 {startTime:MM-dd HH:mm}"
+                Title     = LocalizationManager.Format("MeetingTitleFmt", startTime)
             };
             db.Sessions.Add(session);
             await db.SaveChangesAsync();
@@ -2264,7 +2349,7 @@ public partial class FloatingWindowViewModel : ObservableObject
             var topic = new Topic
             {
                 SessionId  = session.SessionId,
-                Title      = "议题 1",
+                Title      = LocalizationManager.Format("TopicN", 1),
                 StartTime  = startTime,
                 OrderIndex = 0
             };
@@ -2430,27 +2515,38 @@ public partial class FloatingWindowViewModel : ObservableObject
         List<Screenshot> screenshots)
     {
         var sb = new System.Text.StringBuilder();
+        var isEn = LocalizationManager.Instance.IsEnglish;
 
         var duration = session.EndTime.HasValue
             ? (session.EndTime.Value - session.StartTime).ToString(@"hh\:mm")
-            : "未知";
+            : (isEn ? "Unknown" : "未知");
 
-        sb.AppendLine("你是会议纪要助手。请根据以下完整的会议数据生成一份结构化的会议总结。");
+        sb.AppendLine(isEn
+            ? "You are a meeting-minutes assistant. Generate a structured meeting summary from the complete meeting data below. Write the summary in English."
+            : "你是会议纪要助手。请根据以下完整的会议数据生成一份结构化的会议总结。");
         sb.AppendLine();
-        sb.AppendLine($"会议标题：{session.Title ?? "未命名"}");
-        sb.AppendLine($"会议时间：{session.StartTime:yyyy-MM-dd HH:mm} 至 {session.EndTime?.ToString("yyyy-MM-dd HH:mm") ?? "进行中"}");
-        sb.AppendLine($"会议时长：{duration}");
+        sb.AppendLine(isEn
+            ? $"Meeting title: {session.Title ?? "Untitled"}"
+            : $"会议标题：{session.Title ?? "未命名"}");
+        sb.AppendLine(isEn
+            ? $"Meeting time: {session.StartTime:yyyy-MM-dd HH:mm} to {session.EndTime?.ToString("yyyy-MM-dd HH:mm") ?? "in progress"}"
+            : $"会议时间：{session.StartTime:yyyy-MM-dd HH:mm} 至 {session.EndTime?.ToString("yyyy-MM-dd HH:mm") ?? "进行中"}");
+        sb.AppendLine(isEn ? $"Duration: {duration}" : $"会议时长：{duration}");
         sb.AppendLine();
 
         // Topic overview (screenshot analyses are embedded under the topic they belong to,
         // so the model can correlate "what was on screen" with "what was being discussed")
-        sb.AppendLine("【议题概览】（各议题下附该时段的屏幕内容分析）");
+        sb.AppendLine(isEn
+            ? "[Topic Overview] (screen content analysis for each time slot is attached under its topic)"
+            : "【议题概览】（各议题下附该时段的屏幕内容分析）");
         for (var i = 0; i < topics.Count; i++)
         {
             var t = topics[i];
-            sb.AppendLine($"议题{i + 1}：{t.Title}（{t.StartTime:HH:mm} - {(t.EndTime?.ToString("HH:mm") ?? "至今")}）");
+            sb.AppendLine(isEn
+                ? $"Topic {i + 1}: {t.Title} ({t.StartTime:HH:mm} - {(t.EndTime?.ToString("HH:mm") ?? "now")})"
+                : $"议题{i + 1}：{t.Title}（{t.StartTime:HH:mm} - {(t.EndTime?.ToString("HH:mm") ?? "至今")}）");
             if (!string.IsNullOrWhiteSpace(t.Summary))
-                sb.AppendLine($"  摘要：{t.Summary}");
+                sb.AppendLine(isEn ? $"  Summary: {t.Summary}" : $"  摘要：{t.Summary}");
 
             var topicShots = screenshots
                 .Where(s => s.RelatedTopicId == t.TopicId
@@ -2461,9 +2557,11 @@ public partial class FloatingWindowViewModel : ObservableObject
             var topicShotChars = 0;
             foreach (var s in topicShots)
             {
-                var line = $"  屏幕[{s.Timestamp:HH:mm:ss}] {s.ContentType ?? "内容"}：{s.AISummary ?? s.OcrText ?? ""}";
+                var line = isEn
+                    ? $"  Screen[{s.Timestamp:HH:mm:ss}] {s.ContentType ?? "Content"}: {s.AISummary ?? s.OcrText ?? ""}"
+                    : $"  屏幕[{s.Timestamp:HH:mm:ss}] {s.ContentType ?? "内容"}：{s.AISummary ?? s.OcrText ?? ""}";
                 if (!string.IsNullOrWhiteSpace(s.KeyNumbers))
-                    line += $"（关键数据：{s.KeyNumbers}）";
+                    line += isEn ? $" (Key data: {s.KeyNumbers})" : $"（关键数据：{s.KeyNumbers}）";
                 if (topicShotChars + line.Length > 800) break;
                 sb.AppendLine(line);
                 topicShotChars += line.Length;
@@ -2475,7 +2573,7 @@ public partial class FloatingWindowViewModel : ObservableObject
         var allDecisions = topics.SelectMany(t => t.Decisions).ToList();
         if (allDecisions.Count > 0)
         {
-            sb.AppendLine("【所有决策】");
+            sb.AppendLine(isEn ? "[All decisions]" : "【所有决策】");
             foreach (var d in allDecisions)
                 sb.AppendLine($"- {d.DecisionText}");
             sb.AppendLine();
@@ -2485,9 +2583,9 @@ public partial class FloatingWindowViewModel : ObservableObject
         var allActions = topics.SelectMany(t => t.ActionItems).ToList();
         if (allActions.Count > 0)
         {
-            sb.AppendLine("【所有行动项】");
+            sb.AppendLine(isEn ? "[All action items]" : "【所有行动项】");
             foreach (var a in allActions)
-                sb.AppendLine($"- {a.AssignedTo}：{a.Task}" + (a.Deadline is not null ? $"（{a.Deadline}）" : ""));
+                sb.AppendLine($"- {a.AssignedTo}: {a.Task}" + (a.Deadline is not null ? $" ({a.Deadline})" : ""));
             sb.AppendLine();
         }
 
@@ -2499,15 +2597,19 @@ public partial class FloatingWindowViewModel : ObservableObject
             .ToList();
         if (orphanShots.Count > 0)
         {
-            sb.AppendLine("【其他屏幕内容】（未归属议题的关键截图）");
+            sb.AppendLine(isEn
+                ? "[Other screen content] (key screenshots not attributable to any topic)"
+                : "【其他屏幕内容】（未归属议题的关键截图）");
             var charCount = 0;
             foreach (var s in orphanShots)
             {
-                var line = $"[{s.Timestamp:HH:mm:ss}] 类型：{s.ContentType ?? "未知"} | 内容：{s.AISummary ?? ""}";
+                var line = isEn
+                    ? $"[{s.Timestamp:HH:mm:ss}] Type: {s.ContentType ?? "Unknown"} | Content: {s.AISummary ?? ""}"
+                    : $"[{s.Timestamp:HH:mm:ss}] 类型：{s.ContentType ?? "未知"} | 内容：{s.AISummary ?? ""}";
                 if (!string.IsNullOrWhiteSpace(s.OcrText))
-                    line += $" | 关键文字：{s.OcrText}";
+                    line += isEn ? $" | Key text: {s.OcrText}" : $" | 关键文字：{s.OcrText}";
                 if (!string.IsNullOrWhiteSpace(s.KeyNumbers))
-                    line += $" | 关键数据：{s.KeyNumbers}";
+                    line += isEn ? $" | Key data: {s.KeyNumbers}" : $" | 关键数据：{s.KeyNumbers}";
                 if (charCount + line.Length > 1500) break;
                 sb.AppendLine(line);
                 charCount += line.Length + 1;
@@ -2515,16 +2617,32 @@ public partial class FloatingWindowViewModel : ObservableObject
             sb.AppendLine();
         }
 
-        sb.AppendLine("请注意：转录文本是口头讨论，屏幕内容分析是与会者当时看到的信息（PPT/图表/文档等）。" +
-            "请将两者结合——屏幕上展示的数据、结论若被讨论到，应在总结中体现其具体内容。");
+        sb.AppendLine(isEn
+            ? "Note: the transcript is the verbal discussion; the screen content analysis is what participants saw at the time (slides/charts/documents etc.). " +
+              "Combine the two — when data or conclusions shown on screen were discussed, reflect their specific content in the summary."
+            : "请注意：转录文本是口头讨论，屏幕内容分析是与会者当时看到的信息（PPT/图表/文档等）。" +
+              "请将两者结合——屏幕上展示的数据、结论若被讨论到，应在总结中体现其具体内容。");
         sb.AppendLine();
-        sb.AppendLine("请生成一份完整的会议总结，用JSON格式返回：");
-        sb.AppendLine("{");
-        sb.AppendLine("  \"summary\": \"3-5句话的整体会议概述，涵盖会议目标、讨论要点、核心成果\",");
-        sb.AppendLine("  \"key_highlights\": [\"要点1\", \"要点2\", \"要点3\"],");
-        sb.AppendLine("  \"next_steps\": [\"后续行动建议1\", \"后续行动建议2\"]");
-        sb.AppendLine("}");
-        sb.AppendLine("只返回JSON，不要Markdown标记。");
+        if (isEn)
+        {
+            sb.AppendLine("Generate a complete meeting summary as JSON:");
+            sb.AppendLine("{");
+            sb.AppendLine("  \"summary\": \"An overall 3-5 sentence overview covering the meeting's goals, discussion points, and core outcomes\",");
+            sb.AppendLine("  \"key_highlights\": [\"highlight1\", \"highlight2\", \"highlight3\"],");
+            sb.AppendLine("  \"next_steps\": [\"suggested next step 1\", \"suggested next step 2\"]");
+            sb.AppendLine("}");
+            sb.AppendLine("Return JSON only, no Markdown.");
+        }
+        else
+        {
+            sb.AppendLine("请生成一份完整的会议总结，用JSON格式返回：");
+            sb.AppendLine("{");
+            sb.AppendLine("  \"summary\": \"3-5句话的整体会议概述，涵盖会议目标、讨论要点、核心成果\",");
+            sb.AppendLine("  \"key_highlights\": [\"要点1\", \"要点2\", \"要点3\"],");
+            sb.AppendLine("  \"next_steps\": [\"后续行动建议1\", \"后续行动建议2\"]");
+            sb.AppendLine("}");
+            sb.AppendLine("只返回JSON，不要Markdown标记。");
+        }
 
         return sb.ToString();
     }
@@ -2533,8 +2651,15 @@ public partial class FloatingWindowViewModel : ObservableObject
     private sealed record SpeakerRefinementContext(
         DateTime StartedAt, List<DiarizedSegment> Segments, Dictionary<int, string> ClusterToLabel);
 
+    /// <summary>Anonymous speaker labels: "发言人N" (Chinese ASR) or "Speaker N" (English ASR).
+    /// Old Chinese DB records keep the 发言人 prefix, so both must be recognized.</summary>
+    private static bool IsAnonymousSpeakerLabel(string? label)
+        => label is not null
+           && (label.StartsWith("发言人", StringComparison.Ordinal)
+               || label.StartsWith("Speaker", StringComparison.OrdinalIgnoreCase));
+
     /// <summary>
-    /// Re-labels "发言人N" transcripts using an offline diarization pass over the meeting
+    /// Re-labels "发言人N"/"Speaker N" transcripts using an offline diarization pass over the meeting
     /// recording. Offline cluster IDs are mapped back onto the existing online labels by
     /// majority vote, so downstream OCR name mapping and manual renames keep working.
     /// Returns the alignment context for speech-activity-based name mapping, or null.
@@ -2553,7 +2678,7 @@ public partial class FloatingWindowViewModel : ObservableObject
         const double maxSnapSec    = 1.5;
 
         var labeled = topics.SelectMany(t => t.Transcripts)
-            .Where(tr => tr.Speaker is not null && tr.Speaker.StartsWith("发言人"))
+            .Where(tr => tr.Speaker is not null && IsAnonymousSpeakerLabel(tr.Speaker))
             .ToList();
         if (labeled.Count == 0) return null;
 
@@ -2751,7 +2876,7 @@ public partial class FloatingWindowViewModel : ObservableObject
         var labelTimestamps = topics
             .SelectMany(t => t.Transcripts)
             .Where(tr => tr.Speaker is not null
-                && tr.Speaker.StartsWith("发言人")
+                && IsAnonymousSpeakerLabel(tr.Speaker)
                 && !mapping.ContainsKey(tr.Speaker))
             .Select(tr => (Label: tr.Speaker!, tr.Timestamp))
             .ToList();

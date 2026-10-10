@@ -96,7 +96,7 @@ public class VisionService : IVisionService
         {
             _logger.LogWarning("[Vision] Skipping analysis — {Count} consecutive failures (circuit open)",
                 _consecutiveFails);
-            return CreateFallbackResult("分析暂不可用（连续失败）");
+            return CreateFallbackResult(LocalizationManager.Get("VisionUnavailableCircuit"));
         }
 
         await _gate.WaitAsync(ct);
@@ -111,20 +111,25 @@ public class VisionService : IVisionService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[Vision] Failed to read image: {Path}", imagePath);
-                return CreateFallbackResult("图片读取失败");
+                return CreateFallbackResult(LocalizationManager.Get("VisionImageReadFailed"));
             }
 
             var base64 = Convert.ToBase64String(imageBytes);
+            var isEnglish = LocalizationManager.Instance.IsEnglish;
             var transcripts = surroundingTranscripts.Count > 0
                 ? string.Join("\n", surroundingTranscripts.TakeLast(6))
-                : "（无）";
+                : LocalizationManager.Get("VisionNoTranscript");
 
             // Build the Vision prompt (matching vision.txt 3.1.4)
-            var topicText = currentTopic ?? "（未检测）";
+            var topicText = currentTopic ?? LocalizationManager.Get("VisionTopicNotDetected");
             var transcriptsText = transcripts;
-            var userMessage = "【会议背景】\n当前议题: " + topicText + "\n\n【截图时间点前后的转写】\n" + transcriptsText + "\n\n【任务】\n分析截图内容,重点关注:\n1. 屏幕上展示的是什么(文档/幻灯片/数据图表/白板/代码/聊天窗口/其他)\n2. 关键数据、结论或信息\n3. 与当前会议讨论的关联性\n4. 图中可读文字(OCR)\n5. 视频会议UI中正在发言的人的名字(通常在屏幕顶部/底部/角落显示当前讲话人名称，如\"张三 正在发言\"、\"李四 (发言中)\"等)\n\n【重要】仅输出以下 JSON 格式,字段名严格使用英文小写+下划线:\n{\n  \"ai_summary\": \"2~4句描述图中内容和会议关联\",\n  \"content_type\": \"slide/chart/document/whiteboard/code/chat/browser/other\",\n  \"key_entities\": [\"关键词1\", \"关键词2\"],\n  \"key_numbers\": [\"12%\", \"50万\"],\n  \"ocr_text\": \"图中可读文字(关键部分)\",\n  \"meeting_relevance\": \"high/medium/low\",\n  \"sensitivity_level\": \"low/medium/high\",\n  \"active_speaker_name\": \"当前发言人的名字(如能看到)，否则填null\"\n}\n只输出 JSON,不要解释,不要使用中文字段名。";
+            var userMessage = isEnglish
+                ? "[Meeting context]\nCurrent topic: " + topicText + "\n\n[Transcript around the screenshot time]\n" + transcriptsText + "\n\n[Task]\nAnalyze the screenshot, focusing on:\n1. What is shown on screen (document/slide/data chart/whiteboard/code/chat window/other)\n2. Key data, conclusions, or information\n3. Relevance to the current meeting discussion\n4. Readable text in the image (OCR)\n5. The name of the person currently speaking in the video-conference UI (the current speaker's name is usually shown at the top/bottom/corner of the screen, e.g. \"John is speaking\", \"Jane (speaking)\")\n\n[Important] Output ONLY the following JSON format; field names must be strictly English lowercase + underscore:\n{\n  \"ai_summary\": \"2-4 sentences describing the image content and its relation to the meeting\",\n  \"content_type\": \"slide/chart/document/whiteboard/code/chat/browser/other\",\n  \"key_entities\": [\"keyword1\", \"keyword2\"],\n  \"key_numbers\": [\"12%\", \"500K\"],\n  \"ocr_text\": \"readable text in the image (key parts)\",\n  \"meeting_relevance\": \"high/medium/low\",\n  \"sensitivity_level\": \"low/medium/high\",\n  \"active_speaker_name\": \"name of the current speaker (if visible), otherwise null\"\n}\nOutput JSON only, no explanations, no Chinese field names."
+                : "【会议背景】\n当前议题: " + topicText + "\n\n【截图时间点前后的转写】\n" + transcriptsText + "\n\n【任务】\n分析截图内容,重点关注:\n1. 屏幕上展示的是什么(文档/幻灯片/数据图表/白板/代码/聊天窗口/其他)\n2. 关键数据、结论或信息\n3. 与当前会议讨论的关联性\n4. 图中可读文字(OCR)\n5. 视频会议UI中正在发言的人的名字(通常在屏幕顶部/底部/角落显示当前讲话人名称，如\"张三 正在发言\"、\"李四 (发言中)\"等)\n\n【重要】仅输出以下 JSON 格式,字段名严格使用英文小写+下划线:\n{\n  \"ai_summary\": \"2~4句描述图中内容和会议关联\",\n  \"content_type\": \"slide/chart/document/whiteboard/code/chat/browser/other\",\n  \"key_entities\": [\"关键词1\", \"关键词2\"],\n  \"key_numbers\": [\"12%\", \"50万\"],\n  \"ocr_text\": \"图中可读文字(关键部分)\",\n  \"meeting_relevance\": \"high/medium/low\",\n  \"sensitivity_level\": \"low/medium/high\",\n  \"active_speaker_name\": \"当前发言人的名字(如能看到)，否则填null\"\n}\n只输出 JSON,不要解释,不要使用中文字段名。";
 
-            var systemPrompt = "你是会议视觉内容分析助手。请分析这张会议截图并生成结构化描述。";
+            var systemPrompt = isEnglish
+                ? "You are a meeting visual-content analysis assistant. Analyze this meeting screenshot and produce a structured description."
+                : "你是会议视觉内容分析助手。请分析这张会议截图并生成结构化描述。";
 
             string response;
             try
@@ -135,13 +140,13 @@ public class VisionService : IVisionService
             {
                 _logger.LogWarning("[Vision] Request timed out for {Path}", imagePath);
                 RegisterFailure();
-                return CreateFallbackResult("分析超时");
+                return CreateFallbackResult(LocalizationManager.Get("VisionTimeout"));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[Vision] LLM call failed for {Path}", imagePath);
                 RegisterFailure();
-                return CreateFallbackResult($"分析失败: {ex.Message}");
+                return CreateFallbackResult(LocalizationManager.Format("VisionFailed", ex.Message));
             }
 
             // Parse the JSON response
@@ -156,7 +161,7 @@ public class VisionService : IVisionService
                 {
                     _logger.LogWarning("[Vision] Response lacks ai_summary. Raw: {Resp}", response);
                     AppLog.Warn("VisionService", $"模型返回内容(前200字): {response[..Math.Min(response.Length, 200)]}");
-                    return CreateFallbackResult("模型未返回有效分析内容");
+                    return CreateFallbackResult(LocalizationManager.Get("VisionEmptyAnalysis"));
                 }
 
                 _logger.LogInformation("[Vision] OK — type={Type} relevance={Relevance}",
@@ -167,7 +172,7 @@ public class VisionService : IVisionService
             {
                 _logger.LogError(ex, "[Vision] Failed to parse response: {Resp}", response);
                 RegisterFailure();
-                return CreateFallbackResult("响应解析失败");
+                return CreateFallbackResult(LocalizationManager.Get("VisionParseFailed"));
             }
         }
         finally

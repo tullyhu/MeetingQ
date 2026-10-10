@@ -31,13 +31,13 @@ public partial class App : Application
     {
         // Catch any unhandled exception and show it in a MessageBox before the process dies.
         AppDomain.CurrentDomain.UnhandledException += (_, ex) =>
-            MessageBox.Show(ex.ExceptionObject?.ToString(), "MeetingQ 启动错误",
+            MessageBox.Show(ex.ExceptionObject?.ToString(), LocalizationManager.Get("AppStartupErrorTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
 
         DispatcherUnhandledException += (_, ex) =>
         {
             AppLog.Error("App", "Dispatcher 未处理异常", ex.Exception);
-            MessageBox.Show(ex.Exception?.ToString(), "MeetingQ 运行错误",
+            MessageBox.Show(ex.Exception?.ToString(), LocalizationManager.Get("AppRuntimeErrorTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
             ex.Handled = true;
         };
@@ -46,6 +46,20 @@ public partial class App : Application
 
         // Initialize file logger immediately — before everything else so no log is lost.
         AppLog.Initialize();
+
+        // Restore the persisted UI-language preference as early as possible so the
+        // error dialogs above/below show the right language even during startup crashes.
+        try
+        {
+            LocalizationManager.Instance.LoadPreference(
+                SecureStorage.Load(SecureStorageKeys.Language) switch
+                {
+                    "zh-CN" => AppLanguage.Chinese,
+                    "en"    => AppLanguage.English,
+                    _       => AppLanguage.System,
+                });
+        }
+        catch { }
 
         // Tray app: only exit when Shutdown() is explicitly called (e.g. tray menu "退出").
         // OnLastWindowClose (the default) would exit when all windows are closed, but we
@@ -157,8 +171,9 @@ public partial class App : Application
             {
                 AppLog.Error("App", "数据库迁移失败，数据可能受损", ex);
                 MessageBox.Show(
-                    $"数据库迁移失败：{ex.Message}\n\n你的会议数据可能受损。数据库备份文件：\n{backupPath ?? "（备份失败，无可用备份）"}",
-                    "MeetingQ 数据库错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    LocalizationManager.Format("AppDbMigrationFailedBody", ex.Message,
+                        backupPath ?? LocalizationManager.Get("AppDbBackupUnavailable")),
+                    LocalizationManager.Get("AppDbErrorTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
                 throw;
             }
 
@@ -192,8 +207,14 @@ public partial class App : Application
         });
 
         // ── 5. System tray icon ───────────────────────────────────────────
-        _trayIcon = new NativeTrayIcon("MeetingQ — 双击显示主窗口");
+        _trayIcon = new NativeTrayIcon(LocalizationManager.Get("TrayTooltip"));
         ConfigureTrayIcon(_trayIcon, floatingWindow);
+        LocalizationManager.Instance.LanguageChanged += (_, _) =>
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                _trayIcon.SetTooltip(LocalizationManager.Get("TrayTooltip"));
+                _trayIcon.ContextMenu = BuildTrayMenu(floatingWindow);
+            });
 
         // ── 6. First-run: open Settings if no LLM profile configured ──
         if (!SecureStorage.Exists(SecureStorageKeys.LlmProfiles))
@@ -206,7 +227,7 @@ public partial class App : Application
         } // end try
         catch (Exception ex)
         {
-            MessageBox.Show(ex.ToString(), "MeetingQ 启动失败",
+            MessageBox.Show(ex.ToString(), LocalizationManager.Get("AppLaunchFailedTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
         }
@@ -251,14 +272,19 @@ public partial class App : Application
         tray.DoubleClick += () => Application.Current.Dispatcher.Invoke(
             () => ShowMainWindow(floatingWindow));
 
-        // Context menu
+        tray.ContextMenu = BuildTrayMenu(floatingWindow);
+    }
+
+    // Built via a method (not inline) so the menu can be rebuilt when the UI language changes.
+    private ContextMenu BuildTrayMenu(FloatingWindow floatingWindow)
+    {
         var menu = new ContextMenu();
 
-        var showItem = new MenuItem { Header = "显示主窗口" };
+        var showItem = new MenuItem { Header = LocalizationManager.Get("TrayShowMain") };
         showItem.Click += (_, _) => ShowMainWindow(floatingWindow);
         menu.Items.Add(showItem);
 
-        var historyItem = new MenuItem { Header = "历史会议…" };
+        var historyItem = new MenuItem { Header = LocalizationManager.Get("TrayHistory") };
         historyItem.Click += (_, _) =>
         {
             if (_historyWindow is null)
@@ -273,7 +299,7 @@ public partial class App : Application
         };
         menu.Items.Add(historyItem);
 
-        var settingsItem = new MenuItem { Header = "设置…" };
+        var settingsItem = new MenuItem { Header = LocalizationManager.Get("TraySettings") };
         settingsItem.Click += (_, _) =>
         {
             ShowMainWindow(floatingWindow);
@@ -290,7 +316,7 @@ public partial class App : Application
         };
         menu.Items.Add(settingsItem);
 
-        var logItem = new MenuItem { Header = "打开日志目录" };
+        var logItem = new MenuItem { Header = LocalizationManager.Get("TrayOpenLogs") };
         logItem.Click += (_, _) =>
         {
             try { System.Diagnostics.Process.Start("explorer.exe", AppLog.LogDirectory); }
@@ -300,7 +326,7 @@ public partial class App : Application
 
         menu.Items.Add(new Separator());
 
-        var exitItem = new MenuItem { Header = "退出 MeetingQ" };
+        var exitItem = new MenuItem { Header = LocalizationManager.Get("TrayExit") };
         exitItem.Click += (_, _) =>
         {
             (_host?.Services.GetService<FloatingWindow>())?.MarkExiting();
@@ -308,7 +334,7 @@ public partial class App : Application
         };
         menu.Items.Add(exitItem);
 
-        tray.ContextMenu = menu;
+        return menu;
     }
 
     private static void ShowMainWindow(FloatingWindow window) => window.RestoreFromTray();

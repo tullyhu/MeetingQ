@@ -1,3 +1,4 @@
+using MeetingQ.Infrastructure;
 using Microsoft.Extensions.Logging;
 using System.Speech.Synthesis;
 
@@ -6,6 +7,7 @@ namespace MeetingQ.Services;
 /// <summary>
 /// Plays a spoken test phrase through the system's default audio output so that
 /// WASAPI loopback can capture it, exercising the full audio → VAD → ASR pipeline.
+/// Phrase and voice follow the UI language (English UI → English voice, else Chinese).
 /// </summary>
 internal static class SelfTestAudio
 {
@@ -26,24 +28,37 @@ internal static class SelfTestAudio
             using var synth = new SpeechSynthesizer();
             synth.SetOutputToDefaultAudioDevice();
 
-            var zhVoice = synth.GetInstalledVoices()
-                .FirstOrDefault(v => v.Enabled &&
-                    v.VoiceInfo.Culture.Name.StartsWith("zh", StringComparison.OrdinalIgnoreCase));
+            var preferEnglish = LocalizationManager.Instance.IsEnglish;
+            var voices = synth.GetInstalledVoices()
+                .Where(v => v.Enabled)
+                .Select(v => v.VoiceInfo)
+                .ToList();
+
+            var preferred = voices.FirstOrDefault(v =>
+                preferEnglish
+                    ? v.Culture.Name.StartsWith("en", StringComparison.OrdinalIgnoreCase)
+                    : v.Culture.Name.StartsWith("zh", StringComparison.OrdinalIgnoreCase));
+            var fallback = voices.FirstOrDefault(v =>
+                preferEnglish
+                    ? v.Culture.Name.StartsWith("zh", StringComparison.OrdinalIgnoreCase)
+                    : v.Culture.Name.StartsWith("en", StringComparison.OrdinalIgnoreCase));
+
+            var selected = preferred ?? fallback;
 
             bool isZh;
             string phrase;
-            if (zhVoice is not null)
+            if (selected is not null)
             {
-                synth.SelectVoice(zhVoice.VoiceInfo.Name);
-                phrase = PhraseZh;
-                isZh   = true;
-                logger.LogInformation("[SelfTest] TTS voice: {Voice}", zhVoice.VoiceInfo.Name);
+                synth.SelectVoice(selected.Name);
+                isZh = selected.Culture.Name.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+                phrase = isZh ? PhraseZh : PhraseEn;
+                logger.LogInformation("[SelfTest] TTS voice: {Voice}", selected.Name);
             }
             else
             {
-                phrase = PhraseEn;
-                isZh   = false;
-                logger.LogWarning("[SelfTest] No zh-CN voice installed — using English fallback");
+                phrase = preferEnglish ? PhraseEn : PhraseZh;
+                isZh = !preferEnglish;
+                logger.LogWarning("[SelfTest] No zh/en TTS voice installed — using system default voice");
             }
 
             synth.Rate   = -2;   // -10..10; slightly slower improves ASR accuracy

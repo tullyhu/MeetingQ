@@ -236,7 +236,7 @@ public sealed class SherpaOnnxAsrService : IAsrService, ISpeakerRefinement
         catch (Exception ex)
         {
             AppLog.Error<SherpaOnnxAsrService>($"[LocalASR] ProcessLoop crashed: {ex.GetType().Name} {ex.Message}", ex);
-            ErrorReceived?.Invoke(this, $"本地语音识别出错：{ex.Message}");
+            ErrorReceived?.Invoke(this, LocalizationManager.Format("AsrLocalError", ex.Message));
         }
         finally
         {
@@ -296,7 +296,9 @@ public sealed class SherpaOnnxAsrService : IAsrService, ISpeakerRefinement
 
             var embedding = _extractor.Compute(stream);
             var speakerIndex = _speakerCluster.Assign(embedding);
-            _currentSpeakerLabel = $"发言人{speakerIndex + 1}";
+            _currentSpeakerLabel = LocalizationManager.Instance.IsEnglish
+                ? $"Speaker {speakerIndex + 1}"
+                : $"发言人{speakerIndex + 1}";
             return _currentSpeakerLabel;
         }
         catch (Exception ex)

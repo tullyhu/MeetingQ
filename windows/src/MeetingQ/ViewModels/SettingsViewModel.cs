@@ -88,6 +88,30 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty] private string _userRole = string.Empty;
 
+    // --- 界面语言 / UI language ---
+    // 0 = follow system, 1 = 中文, 2 = English. Applied & persisted immediately on change.
+    [ObservableProperty] private int _languageIndex;
+
+    partial void OnLanguageIndexChanged(int value)
+    {
+        if (_loadingSettings) return; // initial load — don't re-apply/re-persist
+        var pref = value switch
+        {
+            1 => AppLanguage.Chinese,
+            2 => AppLanguage.English,
+            _ => AppLanguage.System,
+        };
+        LocalizationManager.Instance.Preference = pref;
+        var stored = pref switch
+        {
+            AppLanguage.Chinese => "zh-CN",
+            AppLanguage.English => "en",
+            _ => "system",
+        };
+        try { SecureStorage.Save(SecureStorageKeys.Language, stored); }
+        catch (Exception ex) { _logger.LogWarning(ex, "[Settings] Failed to persist language"); }
+    }
+
     // --- 麦克风采集 ---
     [ObservableProperty] private bool   _micEnabled    = false;
     [ObservableProperty] private string _micDeviceName = string.Empty;
@@ -97,7 +121,7 @@ public partial class SettingsViewModel : ObservableObject
     private void RefreshMicDevices()
     {
         MicDeviceNames.Clear();
-        MicDeviceNames.Add("（默认麦克风）");
+        MicDeviceNames.Add(LocalizationManager.Get("SetDefaultMic"));
         try
         {
             using var enumerator = new MMDeviceEnumerator();
@@ -137,7 +161,17 @@ public partial class SettingsViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(SaveStatusIsError))]
     private string _saveStatus = string.Empty;
     public bool HasSaveStatus => !string.IsNullOrEmpty(SaveStatus);
-    public bool SaveStatusIsError => SaveStatus.StartsWith("保存失败");
+
+    private bool _saveFailed;
+    public bool SaveStatusIsError => _saveFailed;
+
+    /// <summary>Sets <see cref="SaveStatus"/> and tracks whether it represents an error.</summary>
+    private void SetSaveStatus(string status, bool isError)
+    {
+        _saveFailed = isError;
+        SaveStatus  = status;
+        OnPropertyChanged(nameof(SaveStatusIsError));
+    }
 
     public bool HasSelectedProfile => SelectedProfile is not null;
 
@@ -197,19 +231,19 @@ public partial class SettingsViewModel : ObservableObject
         var current = StorageConfig.GetStorageDir();
         if (string.IsNullOrWhiteSpace(DataDirectory) || DataDirectory == current)
         {
-            DataDirStatus = "目录未变更，无需迁移";
+            DataDirStatus = LocalizationManager.Get("SetDirUnchanged");
             return;
         }
         try
         {
             var count = StorageConfig.MigrateData(current, DataDirectory);
             DataDirStatus = count > 0
-                ? $"已迁移 {count} 个配置文件到新目录"
-                : "新目录已就绪（旧目录无数据）";
+                ? LocalizationManager.Format("SetDirMigratedFmt", count)
+                : LocalizationManager.Get("SetDirReady");
         }
         catch (Exception ex)
         {
-            DataDirStatus = $"迁移失败：{ex.Message}";
+            DataDirStatus = LocalizationManager.Format("SetDirMigrateFailFmt", ex.Message);
         }
     }
 
@@ -242,6 +276,12 @@ public partial class SettingsViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasAsrTestResult))]
     private string _asrTestResult = string.Empty;
 
+    /// <summary>True after the LLM connection test succeeds; drives the XAML result styling.</summary>
+    [ObservableProperty] private bool _llmTestSucceeded;
+
+    /// <summary>True after the local ASR test succeeds; drives the XAML result styling.</summary>
+    [ObservableProperty] private bool _asrTestSucceeded;
+
     public bool HasConnectionTestResult => !string.IsNullOrEmpty(ConnectionTestResult);
     public bool HasAsrTestResult        => !string.IsNullOrEmpty(AsrTestResult);
 
@@ -273,8 +313,13 @@ public partial class SettingsViewModel : ObservableObject
         LoadFromSecureStorage();
     }
 
+    private bool _loadingSettings;
+
     private void LoadFromSecureStorage()
     {
+        _loadingSettings = true;
+        try
+        {
         UserName        = SecureStorage.Load(SecureStorageKeys.UserName)        ?? string.Empty;
         UserNicknames   = SecureStorage.Load(SecureStorageKeys.UserNicknames)   ?? string.Empty;
         UserAsrVariants = SecureStorage.Load(SecureStorageKeys.UserAsrVariants) ?? string.Empty;
@@ -289,6 +334,14 @@ public partial class SettingsViewModel : ObservableObject
         MicEnabled    = SecureStorage.Load(SecureStorageKeys.MicEnabled) == "true";
         MicDeviceName = SecureStorage.Load(SecureStorageKeys.MicDeviceName) ?? string.Empty;
 
+        // UI language — reflects what App.xaml.cs already applied at startup.
+        LanguageIndex = SecureStorage.Load(SecureStorageKeys.Language) switch
+        {
+            "zh-CN" => 1,
+            "en"    => 2,
+            _       => 0,
+        };
+
         DataDirectory         = StorageConfig.GetStorageDir();
         _savedDataDirectory   = DataDirectory;
         DataDirStatus = string.Empty;
@@ -301,6 +354,8 @@ public partial class SettingsViewModel : ObservableObject
         SelectedProfile = LlmProfiles.FirstOrDefault(p => p.IsActive) ?? LlmProfiles.FirstOrDefault();
 
         RefreshMicDevices();
+        }
+        finally { _loadingSettings = false; }
     }
 
     // ── LLM profile management ────────────────────────────────────────────────
@@ -310,7 +365,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         var item = new LlmProfileItem
         {
-            Name    = "新配置",
+            Name    = LocalizationManager.Get("SetNewProfile"),
             BaseUrl = "https://api.openai.com/v1",
             ModelId = "gpt-4o-mini"
         };
@@ -395,7 +450,7 @@ public partial class SettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "[Settings] Failed to fetch models");
-            ModelsFetchError = $"获取模型列表失败：{ex.Message}";
+            ModelsFetchError = LocalizationManager.Format("SetModelsFetchFailFmt", ex.Message);
         }
         finally
         {
@@ -424,12 +479,12 @@ public partial class SettingsViewModel : ObservableObject
             _nameDetection.ReloadNames();
 
             _logger.LogInformation("All config cleared");
-            DataDirStatus = "配置已清空";
+            DataDirStatus = LocalizationManager.Get("SetConfigCleared");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Clear config failed");
-            DataDirStatus = $"清空失败：{ex.Message}";
+            DataDirStatus = LocalizationManager.Format("SetClearFailFmt", ex.Message);
         }
     }
 
@@ -508,13 +563,13 @@ public partial class SettingsViewModel : ObservableObject
             });
             File.WriteAllText(path, json, Encoding.UTF8);
 
-            DataDirStatus = $"配置已导出：{Path.GetFileName(path)}";
+            DataDirStatus = LocalizationManager.Format("SetConfigExportedFmt", Path.GetFileName(path));
             _logger.LogInformation("[Settings] Config exported to {Path}", path);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Settings] Config export failed");
-            DataDirStatus = $"导出失败：{ex.Message}";
+            DataDirStatus = LocalizationManager.Format("SetExportFailFmt", ex.Message);
         }
     }
 
@@ -528,20 +583,20 @@ public partial class SettingsViewModel : ObservableObject
             if (path is null || !File.Exists(path)) return;
 
             if (ConfirmConfigOverwriteRequested?.Invoke(
-                "导入配置将覆盖当前所有设置（包括 LLM 配置和 API Key）。\n\n确定要继续吗？") != true)
+                LocalizationManager.Get("SetImportConfirm")) != true)
                 return;
 
             var json = File.ReadAllText(path, Encoding.UTF8);
             var import = JsonSerializer.Deserialize<ConfigExport>(json);
             if (import is null || import.Version != 1 || import.LlmProfiles is null)
             {
-                DataDirStatus = "导入失败：文件格式无效或版本不兼容";
+                DataDirStatus = LocalizationManager.Get("SetImportInvalidFormat");
                 return;
             }
             if (import.LlmProfiles.Any(p =>
                     p is null || string.IsNullOrWhiteSpace(p.BaseUrl) || string.IsNullOrWhiteSpace(p.ModelId)))
             {
-                DataDirStatus = "导入失败：配置文件中存在无效的大模型配置（缺少接口地址或模型 ID）";
+                DataDirStatus = LocalizationManager.Get("SetImportInvalidProfile");
                 return;
             }
 
@@ -561,7 +616,7 @@ public partial class SettingsViewModel : ObservableObject
             {
                 LlmProfiles.Add(new LlmProfileItem
                 {
-                    Name              = string.IsNullOrWhiteSpace(p.Name) ? "未命名配置" : p.Name,
+                    Name              = string.IsNullOrWhiteSpace(p.Name) ? LocalizationManager.Get("SetUnnamedProfile") : p.Name,
                     BaseUrl           = p.BaseUrl ?? string.Empty,
                     ApiKey            = p.ApiKey ?? string.Empty,
                     ModelId           = p.ModelId ?? string.Empty,
@@ -576,13 +631,13 @@ public partial class SettingsViewModel : ObservableObject
             // Persist immediately
             SaveSettingsCommand.Execute(null);
 
-            DataDirStatus = $"配置已导入：{Path.GetFileName(path)}（已自动保存）";
+            DataDirStatus = LocalizationManager.Format("SetConfigImportedFmt", Path.GetFileName(path));
             _logger.LogInformation("[Settings] Config imported from {Path}", path);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Settings] Config import failed");
-            DataDirStatus = $"导入失败：{ex.Message}";
+            DataDirStatus = LocalizationManager.Format("SetImportFailFmt", ex.Message);
         }
     }
 
@@ -605,7 +660,9 @@ public partial class SettingsViewModel : ObservableObject
             SecureStorage.Save(SecureStorageKeys.VisionProviderApiKey,  VisionProviderApiKey);
             SecureStorage.Save(SecureStorageKeys.VisionProviderModelId, VisionProviderModelId);
             SecureStorage.Save(SecureStorageKeys.MicEnabled,    MicEnabled ? "true" : "false");
-            SecureStorage.Save(SecureStorageKeys.MicDeviceName, MicDeviceName);
+            // Persist empty for the localized "(Default microphone)" placeholder
+            SecureStorage.Save(SecureStorageKeys.MicDeviceName,
+                MicDeviceName == LocalizationManager.Get("SetDefaultMic") ? string.Empty : MicDeviceName);
 
             // Apply custom data directory if changed
             var currentDir = StorageConfig.GetStorageDir();
@@ -627,18 +684,18 @@ public partial class SettingsViewModel : ObservableObject
 
             if (needsRestart)
             {
-                SaveStatus = "设置已保存";
+                SetSaveStatus(LocalizationManager.Get("SetSaveOk"), isError: false);
                 RestartRequired?.Invoke();
             }
             else
             {
-                SaveStatus = "设置已保存 ✓";
+                SetSaveStatus(LocalizationManager.Get("SetSaveOkCheck"), isError: false);
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Settings] Failed to save settings");
-            SaveStatus = $"保存失败：{ex.Message}";
+            SetSaveStatus(LocalizationManager.Format("SetSaveFailFmt", ex.Message), isError: true);
         }
     }
 
@@ -658,21 +715,34 @@ public partial class SettingsViewModel : ObservableObject
             if (!string.IsNullOrWhiteSpace(UserNicknames))
                 names.AddRange(UserNicknames.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0));
 
-            var namesText = string.Join("、", names);
-            var prompt =
-                $$"""
-                用户在会议中使用的姓名/昵称为：{{namesText}}
+            var namesText = string.Join(LocalizationManager.Instance.IsEnglish ? ", " : "、", names);
+            var prompt = LocalizationManager.Instance.IsEnglish
+                ? $$"""
+                    The user's name/nicknames in meetings: {{namesText}}
 
-                请列举中文语音识别（ASR）可能将上述每个名字误识别成的常见词语。
-                误识别原因通常是：声调不同、声母/韵母相近、读音相似的常用词。
+                    List common words that English speech recognition (ASR) might mishear each name as.
+                    Typical causes: similar sounds, common homophones.
 
-                要求：
-                - 每个名字列举 2～4 个最可能被误识别成的词
-                - 只列举读音相近的常用汉语词汇，不需要解释
-                - 只返回逗号分隔的词列表，不要任何其他内容
+                    Requirements:
+                    - 2-4 most likely misrecognitions per name
+                    - common English words only, no explanations
+                    - return only a comma-separated list
 
-                只返回词列表：
-                """;
+                    Return only the word list:
+                    """
+                : $$"""
+                    用户在会议中使用的姓名/昵称为：{{namesText}}
+
+                    请列举中文语音识别（ASR）可能将上述每个名字误识别成的常见词语。
+                    误识别原因通常是：声调不同、声母/韵母相近、读音相似的常用词。
+
+                    要求：
+                    - 每个名字列举 2～4 个最可能被误识别成的词
+                    - 只列举读音相近的常用汉语词汇，不需要解释
+                    - 只返回逗号分隔的词列表，不要任何其他内容
+
+                    只返回词列表：
+                    """;
 
             // 60s cap for generation tasks
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
@@ -695,17 +765,17 @@ public partial class SettingsViewModel : ObservableObject
             }
             else
             {
-                AsrVariantsError = "LLM 未返回有效结果，请重试";
+                AsrVariantsError = LocalizationManager.Get("SetAsrNoResult");
             }
         }
         catch (OperationCanceledException)
         {
-            AsrVariantsError = "生成超时（60s），请检查 LLM 连接后重试";
+            AsrVariantsError = LocalizationManager.Get("SetAsrGenTimeout");
             _logger.LogWarning("[Settings] ASR variant generation timed out");
         }
         catch (Exception ex)
         {
-            AsrVariantsError = $"生成失败：{ex.Message}";
+            AsrVariantsError = LocalizationManager.Format("SetAsrGenFailFmt", ex.Message);
             _logger.LogError(ex, "[Settings] ASR variant generation failed");
         }
         finally
@@ -717,20 +787,21 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task TestConnectionAsync()
     {
-        ConnectionTestResult = "测试中...";
+        ConnectionTestResult = LocalizationManager.Get("SetTesting");
+        LlmTestSucceeded = false;
         _logger.LogInformation("Testing LLM connection");
         try
         {
             var profile = SelectedProfile ?? LlmProfiles.FirstOrDefault(p => p.IsActive);
             if (profile is null)
             {
-                ConnectionTestResult = "LLM 失败：尚未添加大模型配置";
+                ConnectionTestResult = LocalizationManager.Get("SetLlmNoProfile");
                 return;
             }
             if (string.IsNullOrWhiteSpace(profile.BaseUrl) || string.IsNullOrWhiteSpace(profile.ApiKey)
                 || string.IsNullOrWhiteSpace(profile.ModelId))
             {
-                ConnectionTestResult = "LLM 失败：接口地址、API Key 或模型 ID 为空";
+                ConnectionTestResult = LocalizationManager.Get("SetLlmMissingFields");
                 return;
             }
 
@@ -754,21 +825,24 @@ public partial class SettingsViewModel : ObservableObject
             using var resp = await _httpClient.SendAsync(req, cts.Token);
             var reply = await resp.Content.ReadAsStringAsync(cts.Token);
 
+            LlmTestSucceeded = resp.IsSuccessStatusCode;
             ConnectionTestResult = resp.IsSuccessStatusCode
-                ? "LLM 连接成功 ✓"
-                : $"LLM 失败：HTTP {(int)resp.StatusCode}，请检查 API Key 和接口配置";
+                ? LocalizationManager.Get("SetLlmOk")
+                : LocalizationManager.Format("SetLlmHttpFailFmt", (int)resp.StatusCode);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "LLM connection test failed");
-            ConnectionTestResult = $"LLM 失败：{ex.Message}";
+            LlmTestSucceeded = false;
+            ConnectionTestResult = LocalizationManager.Format("SetLlmFailFmt", ex.Message);
         }
     }
 
     [RelayCommand]
     private async Task TestAsrConnectionAsync()
     {
-        AsrTestResult = "测试中（模型已随安装包内置，仅缺失时才联网下载）...";
+        AsrTestResult = LocalizationManager.Get("SetAsrTesting");
+        AsrTestSucceeded = false;
         _logger.LogInformation("Testing local ASR (sherpa-onnx)");
 
         try
@@ -776,17 +850,18 @@ public partial class SettingsViewModel : ObservableObject
             using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
             await _asrService.ConnectAsync(cts.Token);
             await _asrService.DisconnectAsync(cts.Token);
-            AsrTestResult = "本地 ASR 就绪 ✓";
+            AsrTestResult = LocalizationManager.Get("SetAsrReady");
+            AsrTestSucceeded = true;
             _logger.LogInformation("ASR test passed");
         }
         catch (OperationCanceledException)
         {
-            AsrTestResult = "ASR 测试超时：模型下载过慢，请检查网络";
+            AsrTestResult = LocalizationManager.Get("SetAsrTimeout");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "ASR test failed");
-            AsrTestResult = $"ASR 失败：{ex.Message}";
+            AsrTestResult = LocalizationManager.Format("SetAsrFailFmt", ex.Message);
         }
     }
 
@@ -809,15 +884,15 @@ public partial class SettingsViewModel : ObservableObject
             var m = (int)(totalSecs % 3600 / 60);
 
             StatsLoading    = false;
-            StatsSessions    = $"{count} 次";
+            StatsSessions    = LocalizationManager.Format("SetStatsCountFmt", count);
             StatsTotalTime   = h > 0 ? $"{h}h {m}m" : $"{m}m";
-            StatsTranscripts = $"{transcripts} 条";
-            StatsScreenshots = $"{screenshots} 张";
+            StatsTranscripts = LocalizationManager.Format("SetStatsTranscriptsFmt", transcripts);
+            StatsScreenshots = LocalizationManager.Format("SetStatsShotsFmt", screenshots);
         }
         catch (Exception ex)
         {
             StatsLoading  = false;
-            StatsSessions = $"加载失败：{ex.Message}";
+            StatsSessions = LocalizationManager.Format("SetLoadFailFmt", ex.Message);
             _logger.LogWarning(ex, "Failed to load stats");
         }
     }
@@ -830,7 +905,7 @@ public partial class SettingsViewModel : ObservableObject
     private async Task ClearTranscriptHistoryAsync()
     {
         if (ConfirmDataClearRequested?.Invoke(
-            "确定要清空所有转录历史吗？\n\n这将删除数据库中所有会议的转录文本记录。\n会话记录、截图不受影响。") != true)
+            LocalizationManager.Get("SetClearTranscriptsConfirm")) != true)
             return;
 
         try
@@ -838,13 +913,13 @@ public partial class SettingsViewModel : ObservableObject
             using var db = _dbFactory.CreateDbContext();
             await db.Transcripts.ExecuteDeleteAsync();
             _logger.LogInformation("[Settings] Transcript history cleared");
-            DataDirStatus = "转录历史已清空";
+            DataDirStatus = LocalizationManager.Get("SetTranscriptsCleared");
             await LoadStatsAsync();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Settings] Failed to clear transcript history");
-            DataDirStatus = $"清空转录历史失败：{ex.Message}";
+            DataDirStatus = LocalizationManager.Format("SetClearTranscriptsFailFmt", ex.Message);
         }
     }
 
@@ -852,7 +927,7 @@ public partial class SettingsViewModel : ObservableObject
     private async Task ClearScreenshotHistoryAsync()
     {
         if (ConfirmDataClearRequested?.Invoke(
-            "确定要清空所有截图历史吗？\n\n这将删除数据库记录并删除磁盘上的截图文件。") != true)
+            LocalizationManager.Get("SetClearShotsConfirm")) != true)
             return;
 
         try
@@ -876,13 +951,13 @@ public partial class SettingsViewModel : ObservableObject
 
             _logger.LogInformation("[Settings] Screenshot history cleared: {Db} records, {Files} files deleted",
                 paths.Count, deleted);
-            DataDirStatus = "截图历史已清空";
+            DataDirStatus = LocalizationManager.Get("SetShotsCleared");
             await LoadStatsAsync();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Settings] Failed to clear screenshot history");
-            DataDirStatus = $"清空截图历史失败：{ex.Message}";
+            DataDirStatus = LocalizationManager.Format("SetClearShotsFailFmt", ex.Message);
         }
     }
 }

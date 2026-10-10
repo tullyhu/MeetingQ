@@ -1,3 +1,4 @@
+using MeetingQ.Infrastructure;
 using MeetingQ.ViewModels;
 using Microsoft.Win32;
 using System.Windows;
@@ -56,8 +57,8 @@ public partial class HistoryWindow : Window
     private bool OnConfirmDelete(int sessionId)
     {
         var result = MessageBox.Show(
-            "确定要删除此会议记录及其所有转录、截图、决策和行动项吗？\n\n此操作不可撤销。",
-            "删除确认", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+            LocalizationManager.Get("HistoryDeleteConfirmBody"),
+            LocalizationManager.Get("HistoryDeleteConfirmTitle"), MessageBoxButton.OKCancel, MessageBoxImage.Warning);
         return result == MessageBoxResult.OK;
     }
 
@@ -65,10 +66,12 @@ public partial class HistoryWindow : Window
     {
         var dlg = new SaveFileDialog
         {
-            Title            = "导出会议纪要",
+            Title            = LocalizationManager.Get("HistoryExportTitle"),
             FileName         = defaultName,
             DefaultExt       = ".md",
-            Filter           = "Markdown 文件 (*.md)|*.md|文本文件 (*.txt)|*.txt|所有文件 (*.*)|*.*"
+            Filter           = string.Join('|', LocalizationManager.Get("FileFilterMarkdown"),
+                               LocalizationManager.Get("FileFilterText"),
+                               LocalizationManager.Get("FileFilterAll"))
         };
         return dlg.ShowDialog(this) == true ? dlg.FileName : null;
     }
@@ -77,10 +80,11 @@ public partial class HistoryWindow : Window
     {
         var dlg = new SaveFileDialog
         {
-            Title            = "导出会议纪要 (HTML)",
+            Title            = LocalizationManager.Get("HistoryExportHtmlTitle"),
             FileName         = defaultName,
             DefaultExt       = ".html",
-            Filter           = "HTML 文件 (*.html)|*.html|所有文件 (*.*)|*.*"
+            Filter           = string.Join('|', LocalizationManager.Get("FileFilterHtml"),
+                               LocalizationManager.Get("FileFilterAll"))
         };
         return dlg.ShowDialog(this) == true ? dlg.FileName : null;
     }
@@ -89,10 +93,11 @@ public partial class HistoryWindow : Window
     {
         var dlg = new SaveFileDialog
         {
-            Title            = "导出转写记录",
+            Title            = LocalizationManager.Get("HistoryExportTranscriptTitle"),
             FileName         = defaultName,
             DefaultExt       = ".txt",
-            Filter           = "文本文件 (*.txt)|*.txt|所有文件 (*.*)|*.*"
+            Filter           = string.Join('|', LocalizationManager.Get("FileFilterText"),
+                               LocalizationManager.Get("FileFilterAll"))
         };
         return dlg.ShowDialog(this) == true ? dlg.FileName : null;
     }
@@ -107,7 +112,7 @@ public partial class HistoryWindow : Window
         {
             if (!System.IO.File.Exists(si.FilePath))
             {
-                MessageBox.Show(this, "截图文件不存在，可能已被删除。", "图片无法加载",
+                MessageBox.Show(this, LocalizationManager.Get("ImageNotFoundBody"), LocalizationManager.Get("ImageLoadErrorTitle"),
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -123,7 +128,7 @@ public partial class HistoryWindow : Window
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, $"图片无法加载：{ex.Message}", "图片无法加载",
+                MessageBox.Show(this, LocalizationManager.Format("ImageLoadErrorBody", ex.Message), LocalizationManager.Get("ImageLoadErrorTitle"),
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }

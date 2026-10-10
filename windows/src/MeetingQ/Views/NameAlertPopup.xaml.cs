@@ -1,3 +1,4 @@
+using MeetingQ.Infrastructure;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -27,7 +28,7 @@ public partial class NameAlertPopup : Window
         // Reset pin state for each new alert
         IsPinned          = false;
         PinButton.Opacity = 0.5;
-        PinButton.ToolTip = "固定此提示（防止被新提醒覆盖）";
+        PinButton.ToolTip = LocalizationManager.Get("NameAlertPinTooltipFull");
 
         OriginalTextBlock.Text = originalText;
 
@@ -86,10 +87,10 @@ public partial class NameAlertPopup : Window
         var elapsed = DateTime.Now - _detectedAt;
         var s = (int)elapsed.TotalSeconds;
         ElapsedText.Text = s < 1
-            ? "刚刚有人叫你！"
+            ? LocalizationManager.Get("NameAlertJustNow")
             : s < 60
-                ? $"{s}秒前有人叫你！"
-                : $"{s / 60}分{s % 60}秒前有人叫你！";
+                ? LocalizationManager.Format("NameAlertSecondsAgo", s)
+                : LocalizationManager.Format("NameAlertMinutesAgo", s / 60, s % 60);
     }
 
     private static string NumberedCircle(int index) => index switch
@@ -111,8 +112,8 @@ public partial class NameAlertPopup : Window
         IsPinned         = !IsPinned;
         PinButton.Opacity = IsPinned ? 1.0 : 0.5;
         PinButton.ToolTip = IsPinned
-            ? "已固定 — 点击取消固定"
-            : "固定此提示（防止被新提醒覆盖）";
+            ? LocalizationManager.Get("NameAlertPinnedTooltip")
+            : LocalizationManager.Get("NameAlertPinTooltipFull");
     }
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
@@ -151,7 +152,7 @@ public partial class NameAlertPopup : Window
             Topmost            = true,
             ShowInTaskbar      = false,
             Cursor             = Cursors.Hand,
-            Title              = "截图预览"
+            Title              = LocalizationManager.Get("ScreenshotPreviewTitle")
         };
 
         var img = new Image

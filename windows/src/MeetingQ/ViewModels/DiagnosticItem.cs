@@ -50,7 +50,7 @@ public partial class DiagnosticItem : ObservableObject
     // ── Thread-safe setters ───────────────────────────────────────────────
 
     public void SetPending()             => Dispatch(() => { State = DiagState.Pending; Detail = string.Empty; });
-    public void SetRunning(string detail = "检测中...") => Dispatch(() => { State = DiagState.Running; Detail = detail; });
+    public void SetRunning(string? detail = null) => Dispatch(() => { State = DiagState.Running; Detail = detail ?? MeetingQ.Infrastructure.LocalizationManager.Get("DiagRunning"); });
     public void SetOk(string detail)     => Dispatch(() => { State = DiagState.OK;      Detail = detail; });
     public void SetWarning(string detail) => Dispatch(() => { State = DiagState.Warning; Detail = detail; });
     public void SetError(string detail)   => Dispatch(() => { State = DiagState.Error;   Detail = detail; });

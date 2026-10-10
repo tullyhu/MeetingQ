@@ -4,8 +4,9 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:vm="clr-namespace:MeetingQ.ViewModels"
+        xmlns:local="clr-namespace:MeetingQ.Infrastructure"
         mc:Ignorable="d"
-        Title="MeetingQ 设置"
+        Title="{local:Loc SettingsWindowTitle}"
         Width="660" Height="620"
         MinWidth="520" MinHeight="480"
         WindowStyle="SingleBorderWindow"
@@ -260,7 +261,7 @@
                 </Ellipse>
                 <TextBlock Text="MeetingQ" Foreground="#818CF8" FontWeight="SemiBold" FontSize="14"/>
                 <TextBlock Text="  /" Foreground="#DDDDDD" FontSize="14"/>
-                <TextBlock Text="  设置" Foreground="#566070" FontSize="14"/>
+                <TextBlock Text="{local:Loc SettingsHeader}" Foreground="#566070" FontSize="14"/>
             </StackPanel>
         </Border>
 
@@ -273,15 +274,26 @@
             </TabControl.Resources>
 
             <!-- ── 个人身份 ── -->
-            <TabItem Header="个人身份">
+            <TabItem Header="{local:Loc SettingsTabIdentity}">
                 <ScrollViewer Background="Transparent" VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="28,8,28,20">
-                        <TextBlock Style="{StaticResource SectionHeader}" Text="名字检测配置"/>
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="姓名"/>
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="{local:Loc SettingsLanguageSection}"/>
+                        <ComboBox SelectedIndex="{Binding LanguageIndex, UpdateSourceTrigger=PropertyChanged}"
+                                  HorizontalAlignment="Left" MinWidth="220" Margin="0,2,0,4"
+                                  Padding="8,4">
+                            <ComboBoxItem Content="{local:Loc SettingsLangSystem}"/>
+                            <ComboBoxItem Content="{local:Loc SettingsLangChinese}"/>
+                            <ComboBoxItem Content="{local:Loc SettingsLangEnglish}"/>
+                        </ComboBox>
+                        <TextBlock Text="{local:Loc SettingsLanguageHint}"
+                                   FontSize="11" Foreground="#9AA1B5" TextWrapping="Wrap" Margin="0,0,0,6"/>
+
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="{local:Loc SettingsNameDetectConfig}"/>
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="{local:Loc SettingsNameLabel}"/>
                         <TextBox Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="昵称（逗号分隔）"/>
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="{local:Loc SettingsNicknamesLabel}"/>
                         <TextBox Text="{Binding UserNicknames, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="ASR同音变体（逗号分隔）"/>
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="{local:Loc SettingsAsrVariantsLabel}"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -291,7 +303,7 @@
                                      Text="{Binding UserAsrVariants, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,0,6,0">
                                 <ToolTipService.ToolTip>
-                                    <ToolTip Content="填写 ASR 可能将你的名字误识别成的同音词，多个用逗号分隔"/>
+                                    <ToolTip Content="{local:Loc SettingsAsrVariantsTooltip}"/>
                                 </ToolTipService.ToolTip>
                             </TextBox>
                             <Button Grid.Column="1"
@@ -301,10 +313,10 @@
                                     VerticalAlignment="Stretch">
                                 <Button.Style>
                                     <Style TargetType="Button" BasedOn="{StaticResource TestBtn}">
-                                        <Setter Property="Content" Value="🤖 生成"/>
+                                        <Setter Property="Content" Value="{local:Loc SettingsGenerateBtn}"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsGeneratingAsrVariants}" Value="True">
-                                                <Setter Property="Content" Value="生成中…"/>
+                                                <Setter Property="Content" Value="{local:Loc CommonGenerating}"/>
                                                 <Setter Property="IsEnabled" Value="False"/>
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -319,13 +331,13 @@
                                    TextWrapping="Wrap"
                                    Visibility="{Binding HasAsrVariantsError,
                                        Converter={StaticResource BoolToVis}}"/>
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="角色标签（可选）"/>
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="{local:Loc SettingsRoleLabel}"/>
                         <TextBox Text="{Binding UserRole, UpdateSourceTrigger=PropertyChanged}"/>
                         <Border Style="{StaticResource InfoBox}" Margin="0,18,0,0">
                             <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#7B8499" LineHeight="20">
-                                软件在转录文本中匹配你的姓名 / 昵称。<LineBreak/>
-                                若 ASR 将名字误识别成同音词，填入同音变体即可触发提醒。<LineBreak/>
-                                点击"🤖 生成"让 AI 自动推断可能的同音误识词。
+                                <Run Text="{local:Loc SettingsIdentityHint1}"/><LineBreak/>
+                                <Run Text="{local:Loc SettingsIdentityHint2}"/><LineBreak/>
+                                <Run Text="{local:Loc SettingsIdentityHint3}"/>
                             </TextBlock>
                         </Border>
 
@@ -340,16 +352,16 @@
                             </Rectangle.Fill>
                         </Rectangle>
 
-                        <TextBlock Style="{StaticResource SectionHeader}" Text="数据存储目录"/>
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="{local:Loc SettingsDataDirHeader}"/>
 
                         <Border Style="{StaticResource InfoBox}">
                             <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#2E3448" LineHeight="20">
-                                配置文件和加密数据存储在此目录。可迁移到其他磁盘，<LineBreak/>
-                                但 DPAPI 加密与 Windows 账户绑定，无法跨机器解密。
+                                <Run Text="{local:Loc SettingsDataDirHint1}"/><LineBreak/>
+                                <Run Text="{local:Loc SettingsDataDirHint2}"/>
                             </TextBlock>
                         </Border>
 
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="当前目录"/>
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="{local:Loc SettingsCurrentDir}"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -361,31 +373,31 @@
                                      FontFamily="Consolas" FontSize="12"
                                      Margin="0,0,6,0"/>
                             <Button Grid.Column="1"
-                                    Content="浏览..."
+                                    Content="{local:Loc SettingsBrowse}"
                                     Style="{StaticResource TestBtn}"
                                     Command="{Binding BrowseDataDirectoryCommand}"
                                     Padding="10,7" Margin="0,0,6,0"/>
                             <Button Grid.Column="2"
-                                    Content="打开"
+                                    Content="{local:Loc SettingsOpen}"
                                     Style="{StaticResource TestBtn}"
                                     Command="{Binding OpenDataDirectoryCommand}"
                                     Padding="10,7"/>
                         </Grid>
 
                         <!-- Migrate button -->
-                        <Button Content="迁移现有数据到新目录"
+                        <Button Content="{local:Loc SettingsMigrate}"
                                 Style="{StaticResource TestBtn}"
                                 Command="{Binding MigrateDataDirectoryCommand}"
                                 HorizontalAlignment="Left"
                                 Padding="12,7" Margin="0,8,0,0"/>
                         <TextBlock Style="{StaticResource HintText}" Margin="0,4,0,0"
-                                   Text="更改后点「保存设置」生效；建议先「迁移」再保存，否则旧数据仍在原目录"/>
+                                   Text="{local:Loc SettingsMigrateHint}"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <!-- ── 大模型 ── -->
-            <TabItem Header="大模型">
+            <TabItem Header="{local:Loc SettingsTabLlm}">
                 <Grid Margin="0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="180"/>
@@ -428,7 +440,7 @@
                                                 </Ellipse>
                                                 <TextBlock Text="{Binding Name}" FontSize="13"
                                                            TextTrimming="CharacterEllipsis" MaxWidth="110"/>
-                                                <TextBlock Text="使用中" FontSize="9" Foreground="#16A34A"
+                                                <TextBlock Text="{local:Loc SettingsInUse}" FontSize="9" Foreground="#16A34A"
                                                            VerticalAlignment="Center" Margin="6,0,0,0"
                                                            Visibility="{Binding IsActive, Converter={StaticResource BoolToVis}}"/>
                                             </StackPanel>
@@ -443,11 +455,11 @@
                             <!-- Add / Delete buttons -->
                             <StackPanel Grid.Row="1" Orientation="Horizontal"
                                         Margin="8,4,8,10" HorizontalAlignment="Left">
-                                <Button Content="+ 添加"
+                                <Button Content="{local:Loc SettingsAddProfile}"
                                         Style="{StaticResource TestBtn}"
                                         Command="{Binding AddProfileCommand}"
                                         Padding="10,5" FontSize="11" Margin="0,0,6,0"/>
-                                <Button Content="删除"
+                                <Button Content="{local:Loc CommonDelete}"
                                         Style="{StaticResource TestBtn}"
                                         Command="{Binding DeleteProfileCommand}"
                                         Padding="10,5" FontSize="11"/>
@@ -461,7 +473,7 @@
                         <StackPanel Margin="20,12,20,20">
 
                             <!-- Empty state -->
-                            <TextBlock Text="← 选择或添加一个大模型配置"
+                            <TextBlock Text="{local:Loc SettingsSelectProfileHint}"
                                        Foreground="#2E3448" FontSize="13"
                                        VerticalAlignment="Center" HorizontalAlignment="Center"
                                        Margin="0,60,0,0">
@@ -480,22 +492,22 @@
                             <!-- Edit form (shown when profile selected) -->
                             <StackPanel Visibility="{Binding HasSelectedProfile, Converter={StaticResource BoolToVis}}">
 
-                                <TextBlock Style="{StaticResource SectionHeader}" Text="接口配置"/>
+                                <TextBlock Style="{StaticResource SectionHeader}" Text="{local:Loc SettingsApiConfig}"/>
 
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="配置名称"/>
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{local:Loc SettingsProfileName}"/>
                                 <TextBox Text="{Binding SelectedProfile.Name, UpdateSourceTrigger=PropertyChanged}"/>
 
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="接口地址（Base URL）"/>
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{local:Loc SettingsBaseUrl}"/>
                                 <TextBox Text="{Binding SelectedProfile.BaseUrl, UpdateSourceTrigger=PropertyChanged}"/>
                                 <TextBlock Style="{StaticResource HintText}"
-                                           Text="示例：https://ark.cn-beijing.volces.com/api/v3  /  https://dashscope.aliyuncs.com/compatible-mode/v1"/>
+                                           Text="{local:Loc SettingsBaseUrlHint}"/>
 
                                 <TextBlock Style="{StaticResource FieldLabel}" Text="API Key"/>
                                 <PasswordBox x:Name="ProfileApiKeyBox"
                                              FontFamily="Consolas"
                                              PasswordChanged="ProfileApiKeyBox_PasswordChanged"/>
                                 <TextBlock Style="{StaticResource HintText}"
-                                           Text="API Key 保存时经 Windows DPAPI 加密，不会明文存储"/>
+                                           Text="{local:Loc SettingsApiKeyHint}"/>
 
                                 <Grid Margin="0,12,0,4">
                                     <Grid.ColumnDefinitions>
@@ -503,7 +515,7 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0"
-                                               Text="模型 ID / Endpoint ID"
+                                               Text="{local:Loc SettingsModelId}"
                                                Foreground="#4A5568" FontSize="11" FontWeight="Medium"
                                                VerticalAlignment="Center"/>
                                     <Button Grid.Column="1"
@@ -514,10 +526,10 @@
                                             <TextBlock>
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
-                                                        <Setter Property="Text" Value="获取列表"/>
+                                                        <Setter Property="Text" Value="{local:Loc SettingsFetchModels}"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding IsFetchingModels}" Value="True">
-                                                                <Setter Property="Text" Value="获取中…"/>
+                                                                <Setter Property="Text" Value="{local:Loc SettingsFetchingModels}"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
@@ -537,34 +549,34 @@
                                            Visibility="{Binding HasModelsFetchError,
                                                Converter={StaticResource BoolToVis}}"/>
                                 <TextBlock Style="{StaticResource HintText}"
-                                           Text="示例：gpt-4o-mini  /  qwen-turbo  /  doubao-1-5-pro-32k  /  ep-xxxxxxxx-xxxxx"/>
+                                           Text="{local:Loc SettingsModelIdHint}"/>
 
                                 <!-- Vision model config -->
                                 <Border Background="#FAFAFA" BorderBrush="#DDDDDD" BorderThickness="1"
                                         CornerRadius="6" Padding="12,10" Margin="0,8,0,0">
                                     <StackPanel>
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Vision 模型 ID（可选，多模态截图分析用）"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{local:Loc SettingsVisionModelLabel}"/>
                                         <ComboBox IsEditable="True"
                                                   Text="{Binding SelectedProfile.VisionModelId, UpdateSourceTrigger=PropertyChanged}"
                                                   ItemsSource="{Binding AvailableModels}"
                                                   Background="#F8F8F8" Foreground="#111111"
                                                   BorderBrush="#DDDDDD" BorderThickness="1"/>
                                         <TextBlock Style="{StaticResource HintText}"
-                                                   Text="留空则复用 Model ID。多模态请求自动走此模型，纯文本请求仍走 Model ID"/>
+                                                   Text="{local:Loc SettingsVisionModelHint}"/>
                                     </StackPanel>
                                 </Border>
 
                                 <Border Background="#FAFAFA" BorderBrush="#DDDDDD" BorderThickness="1"
                                         CornerRadius="6" Padding="12,10" Margin="0,8,0,0">
                                     <StackPanel>
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="压缩模型 ID（可选，长会议上下文压缩用）"/>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="{local:Loc SettingsCompressionModelLabel}"/>
                                         <ComboBox IsEditable="True"
                                                   Text="{Binding SelectedProfile.CompressionModelId, UpdateSourceTrigger=PropertyChanged}"
                                                   ItemsSource="{Binding AvailableModels}"
                                                   Background="#F8F8F8" Foreground="#111111"
                                                   BorderBrush="#DDDDDD" BorderThickness="1"/>
                                         <TextBlock Style="{StaticResource HintText}"
-                                                   Text="留空则复用 Model ID。用于压缩长会议历史，可用速度较快的轻量模型"/>
+                                                   Text="{local:Loc SettingsCompressionModelHint}"/>
                                     </StackPanel>
                                 </Border>
 
@@ -581,21 +593,21 @@
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
                                                         <Setter Property="Foreground" Value="#777777"/>
-                                                        <Setter Property="Text" Value="未激活"/>
+                                                        <Setter Property="Text" Value="{local:Loc SettingsInactive}"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding SelectedProfile.IsActive}" Value="True">
                                                                 <Setter Property="Foreground" Value="#22C55E"/>
-                                                                <Setter Property="Text" Value="当前使用中"/>
+                                                                <Setter Property="Text" Value="{local:Loc SettingsActiveNow}"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
                                                 </TextBlock.Style>
                                             </TextBlock>
-                                            <TextBlock Text="启动监听时将自动测试此接口"
+                                            <TextBlock Text="{local:Loc SettingsAutoTestHint}"
                                                        Foreground="#2E3448" FontSize="11" Margin="0,3,0,0"/>
                                         </StackPanel>
                                         <Button Grid.Column="1"
-                                                Content="设为当前使用"
+                                                Content="{local:Loc SettingsSetActive}"
                                                 Style="{StaticResource TestBtn}"
                                                 Command="{Binding SetActiveProfileCommand}"
                                                 Padding="12,7" FontSize="11"/>
@@ -608,7 +620,7 @@
             </TabItem>
 
             <!-- ── 多模态提供商（跨供应商分流） ── -->
-            <TabItem Header="多模态">
+            <TabItem Header="{local:Loc SettingsTabMultimodal}">
                 <ScrollViewer Background="Transparent" VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="28,12,28,20">
                         <Border Background="#FAFAFA" CornerRadius="10"
@@ -616,17 +628,17 @@
                                 Padding="14,12" Margin="0,0,0,16">
                             <StackPanel>
                                 <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="#7C3AED"
-                                           Text="🖼 多模态 Vision 提供商（可选）"
+                                           Text="{local:Loc SettingsVisionProviderHeader}"
                                            Margin="0,0,0,4"/>
                                 <TextBlock Style="{StaticResource HintText}"
-                                           Text="填写此项后，截图分析请求将使用此供应商，纯文本请求仍使用「大模型」Tab 中激活的配置。留空则使用激活配置中设置的 Vision 模型 ID。"/>
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="Base URL（多模态 API 端点）" Margin="0,12,0,0"/>
+                                           Text="{local:Loc SettingsVisionProviderDesc}"/>
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{local:Loc SettingsVisionBaseUrl}" Margin="0,12,0,0"/>
                                 <TextBox Text="{Binding VisionProviderBaseUrl, UpdateSourceTrigger=PropertyChanged}"/>
                                 <TextBlock Style="{StaticResource FieldLabel}" Text="API Key"/>
                                 <PasswordBox x:Name="VisionApiKeyBox"
                                              FontFamily="Consolas"
                                              PasswordChanged="VisionApiKeyBox_PasswordChanged"/>
-                                <TextBlock Style="{StaticResource FieldLabel}" Text="Vision 模型 ID"/>
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="{local:Loc SettingsVisionModelId}"/>
                                 <TextBox Text="{Binding VisionProviderModelId, UpdateSourceTrigger=PropertyChanged}"/>
                             </StackPanel>
                         </Border>
@@ -635,7 +647,7 @@
             </TabItem>
 
             <!-- ── 语音识别 ── -->
-            <TabItem Header="语音识别">
+            <TabItem Header="{local:Loc SettingsTabAsr}">
                 <ScrollViewer Background="Transparent" VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="28,12,28,20">
 
@@ -647,9 +659,9 @@
                                 <TextBlock Text="🌐" FontSize="18" Margin="0,0,12,0"
                                            VerticalAlignment="Center"/>
                                 <StackPanel>
-                                    <TextBlock Text="本地离线语音识别" FontSize="13" FontWeight="SemiBold"
+                                    <TextBlock Text="{local:Loc SettingsLocalAsr}" FontSize="13" FontWeight="SemiBold"
                                                Foreground="#3D4455"/>
-                                    <TextBlock Text="sherpa-onnx 流式 Paraformer · 说话人识别 · 语音不出本机"
+                                    <TextBlock Text="{local:Loc SettingsLocalAsrDesc}"
                                                FontSize="11" Foreground="#2E3448"/>
                                 </StackPanel>
                             </StackPanel>
@@ -666,10 +678,10 @@
                             </Rectangle.Fill>
                         </Rectangle>
 
-                        <TextBlock Style="{StaticResource SectionHeader}" Text="麦克风采集（混音）" Margin="0,0,0,8"/>
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="{local:Loc SettingsMicHeader}" Margin="0,0,0,8"/>
                         <Border Style="{StaticResource InfoBox}" Margin="0,0,0,10">
                             <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#566070" LineHeight="18">
-                                开启后麦克风输入与系统音频混合送入 ASR，适合本地说话也需被识别的场景。
+                                <Run Text="{local:Loc SettingsMicHint}"/>
                             </TextBlock>
                         </Border>
 
@@ -682,14 +694,14 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                    <TextBlock Text="🎤 启用麦克风采集" FontSize="13" Foreground="#3D4455"/>
+                                    <TextBlock Text="{local:Loc SettingsMicEnable}" FontSize="13" Foreground="#3D4455"/>
                                     <TextBlock FontSize="11" Foreground="#2E3448" Margin="0,2,0,0">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
-                                                <Setter Property="Text" Value="当前已关闭"/>
+                                                <Setter Property="Text" Value="{local:Loc SettingsMicOff}"/>
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding MicEnabled}" Value="True">
-                                                        <Setter Property="Text" Value="当前已开启"/>
+                                                        <Setter Property="Text" Value="{local:Loc SettingsMicOn}"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -747,7 +759,7 @@
                         <!-- Mic device selector -->
                         <StackPanel Margin="0,10,0,0"
                                     Visibility="{Binding MicEnabled, Converter={StaticResource BoolToVis}}">
-                            <TextBlock Style="{StaticResource FieldLabel}" Text="麦克风设备" Margin="0,0,0,6"/>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="{local:Loc SettingsMicDevice}" Margin="0,0,0,6"/>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -759,7 +771,7 @@
                                           ItemsSource="{Binding MicDeviceNames}"
                                           Margin="0,0,8,0"/>
                                 <Button Grid.Column="1"
-                                        Content="刷新"
+                                        Content="{local:Loc CommonRefreshPlain}"
                                         Style="{StaticResource TestBtn}"
                                         Command="{Binding RefreshMicDevicesCommand}"
                                         Padding="12,7"/>
@@ -771,16 +783,16 @@
             </TabItem>
 
             <!-- ── 使用统计 ── -->
-            <TabItem Header="使用统计">
+            <TabItem Header="{local:Loc SettingsTabStats}">
                 <ScrollViewer Background="Transparent" VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="28,8,28,20">
-                        <TextBlock Style="{StaticResource SectionHeader}" Text="本机使用统计"/>
-                        <TextBlock Text="加载中…" Foreground="#888888" FontSize="11"
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="{local:Loc SettingsStatsHeader}"/>
+                        <TextBlock Text="{local:Loc CommonLoading}" Foreground="#888888" FontSize="11"
                                    Margin="0,4,0,0"
                                    Visibility="{Binding StatsLoading, Converter={StaticResource BoolToVis}}"/>
                         <Border Style="{StaticResource InfoBox}">
                             <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#2E3448">
-                                以下数据来自本地 SQLite 数据库，不上传至任何服务器。
+                                <Run Text="{local:Loc SettingsStatsHint}"/>
                             </TextBlock>
                         </Border>
                         <Grid Margin="0,16,0,0">
@@ -796,7 +808,7 @@
                                     Background="#F8F8F8" CornerRadius="8"
                                     BorderBrush="#DDDDDD" BorderThickness="1" Padding="16,12">
                                 <StackPanel>
-                                    <TextBlock Text="会议次数" Foreground="#3D4455" FontSize="10" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{local:Loc SettingsStatSessions}" Foreground="#3D4455" FontSize="10" FontWeight="SemiBold"/>
                                     <TextBlock Text="{Binding StatsSessions}" Foreground="#818CF8"
                                                FontSize="22" FontWeight="Bold" Margin="0,6,0,0"/>
                                 </StackPanel>
@@ -805,7 +817,7 @@
                                     Background="#F8F8F8" CornerRadius="8"
                                     BorderBrush="#DDDDDD" BorderThickness="1" Padding="16,12">
                                 <StackPanel>
-                                    <TextBlock Text="累计时长" Foreground="#3D4455" FontSize="10" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{local:Loc SettingsStatTotalTime}" Foreground="#3D4455" FontSize="10" FontWeight="SemiBold"/>
                                     <TextBlock Text="{Binding StatsTotalTime}" Foreground="#22C55E"
                                                FontSize="22" FontWeight="Bold" Margin="0,6,0,0"/>
                                 </StackPanel>
@@ -814,7 +826,7 @@
                                     Background="#F8F8F8" CornerRadius="8"
                                     BorderBrush="#DDDDDD" BorderThickness="1" Padding="16,12">
                                 <StackPanel>
-                                    <TextBlock Text="转录条数" Foreground="#3D4455" FontSize="10" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{local:Loc SettingsStatTranscripts}" Foreground="#3D4455" FontSize="10" FontWeight="SemiBold"/>
                                     <TextBlock Text="{Binding StatsTranscripts}" Foreground="#60A5FA"
                                                FontSize="22" FontWeight="Bold" Margin="0,6,0,0"/>
                                 </StackPanel>
@@ -823,7 +835,7 @@
                                     Background="#F8F8F8" CornerRadius="8"
                                     BorderBrush="#DDDDDD" BorderThickness="1" Padding="16,12">
                                 <StackPanel>
-                                    <TextBlock Text="截图张数" Foreground="#3D4455" FontSize="10" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{local:Loc SettingsStatScreenshots}" Foreground="#3D4455" FontSize="10" FontWeight="SemiBold"/>
                                     <TextBlock Text="{Binding StatsScreenshots}" Foreground="#34D399"
                                                FontSize="22" FontWeight="Bold" Margin="0,6,0,0"/>
                                 </StackPanel>
@@ -841,14 +853,14 @@
                             </Rectangle.Fill>
                         </Rectangle>
                         <TextBlock Style="{StaticResource SectionHeader}"
-                                   Text="清空数据" Margin="0,16,0,8"/>
+                                   Text="{local:Loc SettingsClearData}" Margin="0,16,0,8"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Button Grid.Column="0"
-                                    Content="🗑 清空转录历史"
+                                    Content="{local:Loc SettingsClearTranscripts}"
                                     Command="{Binding ClearTranscriptHistoryCommand}"
                                     Margin="0,0,6,0"
                                     Padding="0,9">
@@ -860,7 +872,7 @@
                                 </Button.Style>
                             </Button>
                             <Button Grid.Column="1"
-                                    Content="🗑 清空截图历史"
+                                    Content="{local:Loc SettingsClearScreenshots}"
                                     Command="{Binding ClearScreenshotHistoryCommand}"
                                     Margin="6,0,0,0"
                                     Padding="0,9">
@@ -874,7 +886,7 @@
                         </Grid>
                         <TextBlock Foreground="#3D4455" FontSize="11" Margin="0,8,0,0"
                                    TextWrapping="Wrap"
-                                   Text="清空截图历史将同时删除磁盘上的图片文件，此操作不可撤销。"/>
+                                   Text="{local:Loc SettingsClearScreenshotsHint}"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -902,10 +914,10 @@
 
                     <!-- Config clear -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                        <Button Content="清空配置"
+                        <Button Content="{local:Loc SettingsClearConfig}"
                                 Command="{Binding ClearAllConfigCommand}"
                                 Padding="14,8" Margin="0,2,0,2"
-                                ToolTip="删除所有配置（不影响会议记录数据库）">
+                                ToolTip="{local:Loc SettingsClearConfigTooltip}">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource TestBtn}">
                                     <Style.Triggers>
@@ -952,7 +964,7 @@
                             <Style TargetType="TextBlock">
                                 <Setter Property="Foreground" Value="#777777"/>
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding AsrTestResult}" Value="AST ASR 连接成功 ✓">
+                                    <DataTrigger Binding="{Binding AsrTestSucceeded}" Value="True">
                                         <Setter Property="Foreground" Value="#22C55E"/>
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -966,7 +978,7 @@
                             <Style TargetType="TextBlock">
                                 <Setter Property="Foreground" Value="#777777"/>
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding ConnectionTestResult}" Value="LLM 连接成功 ✓">
+                                    <DataTrigger Binding="{Binding LlmTestSucceeded}" Value="True">
                                         <Setter Property="Foreground" Value="#22C55E"/>
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -979,27 +991,27 @@
                 <!-- Right: test + save buttons -->
                 <WrapPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
                            HorizontalAlignment="Right">
-                    <Button Content="📋 收集日志"
+                    <Button Content="{local:Loc SettingsCollectLogs}"
                             Style="{StaticResource TestBtn}"
                             Padding="14,8" Margin="0,2,8,2"
                             Click="CollectLogsButton_Click"/>
-                    <Button Content="导出配置"
+                    <Button Content="{local:Loc SettingsExportConfig}"
                             Style="{StaticResource TestBtn}"
                             Command="{Binding ExportConfigCommand}"
                             Padding="14,8" Margin="0,2,8,2"/>
-                    <Button Content="导入配置"
+                    <Button Content="{local:Loc SettingsImportConfig}"
                             Style="{StaticResource TestBtn}"
                             Command="{Binding ImportConfigCommand}"
                             Padding="14,8" Margin="0,2,8,2"/>
-                    <Button Content="测试 ASR"
+                    <Button Content="{local:Loc SettingsTestAsr}"
                             Style="{StaticResource TestBtn}"
                             Command="{Binding TestAsrConnectionCommand}"
                             Padding="14,8" Margin="0,2,8,2"/>
-                    <Button Content="测试 LLM"
+                    <Button Content="{local:Loc SettingsTestLlm}"
                             Style="{StaticResource TestBtn}"
                             Command="{Binding TestConnectionCommand}"
                             Padding="14,8" Margin="0,2,8,2"/>
-                    <Button Content="保存设置"
+                    <Button Content="{local:Loc SettingsSave}"
                             Style="{StaticResource PrimaryBtn}"
                             Command="{Binding SaveSettingsCommand}"
                             IsDefault="True"

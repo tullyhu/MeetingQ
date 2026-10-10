@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MeetingQ.Data;
+using MeetingQ.Infrastructure;
 using MeetingQ.Services;
 using MeetingQ.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -24,9 +25,9 @@ public class ActionItemDisplay
     public string AssignedTo { get; init; } = string.Empty;
     public string Task       { get; init; } = string.Empty;
     public string? Deadline  { get; init; }
-    public string Label => string.IsNullOrEmpty(Deadline)
-        ? $"{AssignedTo}：{Task}"
-        : $"{AssignedTo}：{Task}（{Deadline}）";
+    public string Label => LocalizationManager.Instance.IsEnglish
+        ? (string.IsNullOrEmpty(Deadline) ? $"{AssignedTo}: {Task}" : $"{AssignedTo}: {Task} ({Deadline})")
+        : (string.IsNullOrEmpty(Deadline) ? $"{AssignedTo}：{Task}" : $"{AssignedTo}：{Task}（{Deadline}）");
 }
 
 public partial class SessionItem : ObservableObject
@@ -36,7 +37,8 @@ public partial class SessionItem : ObservableObject
     public DateTime StartTime       { get; init; }
     public DateTime? EndTime        { get; init; }
     public int      ScreenshotCount { get; init; }
-    public string   DateLabel       => StartTime.ToString("yyyy年MM月dd日  HH:mm");
+    public string   DateLabel       => StartTime.ToString(
+        LocalizationManager.Instance.IsEnglish ? "MMM dd, yyyy  HH:mm" : "yyyy年MM月dd日  HH:mm");
     public string   DurationLabel
     {
         get
@@ -51,7 +53,7 @@ public partial class SessionItem : ObservableObject
     [ObservableProperty]
     private string? _overallSummary;
     public List<string>            TopicTitles    { get; init; } = new();
-    public string TopicsLabel => TopicTitles.Count == 0 ? "（无议题）" : string.Join("  ·  ", TopicTitles);
+    public string TopicsLabel => TopicTitles.Count == 0 ? LocalizationManager.Get("HistNoTopics") : string.Join("  ·  ", TopicTitles);
 
     // ── Mutable detail properties (set after lazy load; notify UI) ──
 
@@ -79,7 +81,7 @@ public partial class SessionItem : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasActionItems))]
     private List<ActionItemDisplay> _actionItems = new();
 
-    public string TranscriptCountLabel => $"{TranscriptCount} 条转录";
+    public string TranscriptCountLabel => LocalizationManager.Format("HistTranscriptCountFmt", TranscriptCount);
     public bool   HasTranscripts       => Transcripts.Count > 0;
     public bool   HasScreenshots       => ScreenshotPaths.Count > 0;
     public bool   HasDecisions         => Decisions.Count > 0;
@@ -109,7 +111,7 @@ public partial class HistoryViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(EditSpeakersCommand))]
     private SessionItem? _selectedSession;
 
-    [ObservableProperty] private string _statusText    = "加载历史会议...";
+    [ObservableProperty] private string _statusText    = LocalizationManager.Get("HistLoading");
     [ObservableProperty] private bool   _isLoading     = true;
     [ObservableProperty] private bool   _isLoadingDetail;
     [ObservableProperty] private bool   _hasSelected;
@@ -144,7 +146,7 @@ public partial class HistoryViewModel : ObservableObject
     public async Task LoadAsync()
     {
         IsLoading  = true;
-        StatusText = "加载历史会议...";
+        StatusText = LocalizationManager.Get("HistLoading");
         Sessions.Clear();
         _allSessions.Clear();
         _loadedIds.Clear();
@@ -185,7 +187,7 @@ public partial class HistoryViewModel : ObservableObject
                 _allSessions.Add(new SessionItem
                 {
                     SessionId       = s.SessionId,
-                    Title           = s.Title ?? $"会议 {s.StartTime:MM-dd}",
+                    Title           = s.Title ?? LocalizationManager.Format("HistMeetingTitleFmt", s.StartTime),
                     StartTime       = s.StartTime,
                     EndTime         = s.EndTime,
                     OverallSummary  = s.Summary,
@@ -206,12 +208,14 @@ public partial class HistoryViewModel : ObservableObject
             }
 
             ApplyFilter();
-            StatusText = sessions.Count == 0 ? "暂无历史会议" : $"共 {sessions.Count} 次会议";
+            StatusText = sessions.Count == 0
+                ? LocalizationManager.Get("HistEmpty")
+                : LocalizationManager.Format("HistTotalFmt", sessions.Count);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load history");
-            StatusText = $"加载失败：{ex.Message}";
+            StatusText = LocalizationManager.Format("HistLoadFailFmt", ex.Message);
         }
         finally
         {
@@ -243,8 +247,8 @@ public partial class HistoryViewModel : ObservableObject
                 SelectedSession = stillHere;
         }
         StatusText = string.IsNullOrWhiteSpace(SearchText)
-            ? $"共 {_allSessions.Count} 次会议"
-            : $"筛选：{Sessions.Count} / {_allSessions.Count} 次";
+            ? LocalizationManager.Format("HistTotalFmt", _allSessions.Count)
+            : LocalizationManager.Format("HistFilterFmt", Sessions.Count, _allSessions.Count);
         OnPropertyChanged(nameof(FilteredCount));
         OnPropertyChanged(nameof(TotalCount));
     }
@@ -393,13 +397,13 @@ public partial class HistoryViewModel : ObservableObject
             _loadedIds.Remove(id);
             SelectedSession = null;
             ApplyFilter();
-            StatusText = "已删除";
+            StatusText = LocalizationManager.Get("HistDeleted");
             _logger.LogInformation("[History] Deleted session {Id}", id);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[History] Failed to delete session {Id}", id);
-            StatusText = $"删除失败：{ex.Message}";
+            StatusText = LocalizationManager.Format("HistDeleteFailFmt", ex.Message);
         }
     }
 
@@ -469,7 +473,7 @@ public partial class HistoryViewModel : ObservableObject
 
             var updated = transcripts.Count;
 
-            StatusText = $"已将「{oldName}」修正为「{newName}」（{updated} 条转录）";
+            StatusText = LocalizationManager.Format("HistSpeakerRenamedFmt", oldName, newName, updated);
             _logger.LogInformation("[History] Speaker renamed: {Old} → {New} in session {Id} ({Count} transcripts)",
                 oldName, newName, session.SessionId, updated);
             return true;
@@ -478,7 +482,7 @@ public partial class HistoryViewModel : ObservableObject
         {
             _logger.LogError(ex, "[History] Failed to rename speaker {Old} in session {Id}",
                 oldName, session.SessionId);
-            StatusText = $"发言人修正失败：{ex.Message}";
+            StatusText = LocalizationManager.Format("HistSpeakerRenameFailFmt", ex.Message);
             return false;
         }
     }
@@ -493,11 +497,11 @@ public partial class HistoryViewModel : ObservableObject
 
         if (_vision is null)
         {
-            StatusText = "Vision 服务不可用，请确认已配置并启用多模态";
+            StatusText = LocalizationManager.Get("HistVisionUnavailable");
             return;
         }
 
-        StatusText = "多模态重新分析中...";
+        StatusText = LocalizationManager.Get("HistRegenRunning");
         _logger.LogInformation("[RegenVision] Starting vision re-analysis for session {Id}", session.SessionId);
 
         try
@@ -511,7 +515,7 @@ public partial class HistoryViewModel : ObservableObject
 
             if (screenshots.Count == 0)
             {
-                StatusText = "该会议无截图，无法进行多模态分析";
+                StatusText = LocalizationManager.Get("HistNoScreenshots");
                 return;
             }
 
@@ -558,7 +562,7 @@ public partial class HistoryViewModel : ObservableObject
             // Regenerate the session summary so it reflects the new screenshot analysis
             if (analyzed > 0)
             {
-                StatusText = "重新生成会议总结...";
+                StatusText = LocalizationManager.Get("HistRegenSummary");
                 try
                 {
                     var meetingSession = await db.Sessions.FindAsync(session.SessionId);
@@ -600,13 +604,13 @@ public partial class HistoryViewModel : ObservableObject
             await LoadDetailAsync(session.SessionId);
 
             StatusText = analyzed > 0
-                ? $"多模态分析完成：{analyzed} 张截图已分析，会议总结已更新"
-                : "所有截图已有分析结果，无需重复分析";
+                ? LocalizationManager.Format("HistRegenDoneFmt", analyzed)
+                : LocalizationManager.Get("HistRegenNoop");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[RegenVision] Failed");
-            StatusText = $"多模态分析失败：{ex.Message}";
+            StatusText = LocalizationManager.Format("HistRegenFailFmt", ex.Message);
         }
     }
 
@@ -632,12 +636,12 @@ public partial class HistoryViewModel : ObservableObject
             await File.WriteAllTextAsync(path, md, Encoding.UTF8);
             _logger.LogInformation("[Export] Saved meeting minutes to {Path} ({AssetCount} assets)",
                 path, copiedMap.Count);
-            StatusText = $"已导出：{Path.GetFileName(path)}";
+            StatusText = LocalizationManager.Format("HistExportedFmt", Path.GetFileName(path));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Export] Failed to save meeting minutes");
-            StatusText = $"导出失败：{ex.Message}";
+            StatusText = LocalizationManager.Format("HistExportFailFmt", ex.Message);
         }
     }
 
@@ -704,12 +708,12 @@ public partial class HistoryViewModel : ObservableObject
             var html = BuildHtml(SelectedSession, dataUris);
             await File.WriteAllTextAsync(path, html, Encoding.UTF8);
             _logger.LogInformation("[Export] Saved meeting minutes HTML to {Path}", path);
-            StatusText = $"已导出：{Path.GetFileName(path)}";
+            StatusText = LocalizationManager.Format("HistExportedFmt", Path.GetFileName(path));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Export] Failed to save meeting minutes HTML");
-            StatusText = $"导出失败：{ex.Message}";
+            StatusText = LocalizationManager.Format("HistExportFailFmt", ex.Message);
         }
     }
 
@@ -751,12 +755,12 @@ public partial class HistoryViewModel : ObservableObject
             var text = BuildTranscriptText(SelectedSession);
             await File.WriteAllTextAsync(path, text, Encoding.UTF8);
             _logger.LogInformation("[Export] Saved transcript to {Path}", path);
-            StatusText = $"已导出转写：{System.IO.Path.GetFileName(path)}";
+            StatusText = LocalizationManager.Format("HistExportedTranscriptFmt", System.IO.Path.GetFileName(path));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Export] Failed to save transcript");
-            StatusText = $"导出失败：{ex.Message}";
+            StatusText = LocalizationManager.Format("HistExportFailFmt", ex.Message);
         }
     }
 
@@ -766,18 +770,51 @@ public partial class HistoryViewModel : ObservableObject
         await LoadDetailAsync(session.SessionId);
     }
 
+    // ── Export template strings (user-facing output files; follow UI language) ──
+
+    /// <summary>Localized labels for exported markdown / transcript / HTML files.</summary>
+    private sealed class ExportStrings
+    {
+        public static readonly ExportStrings Current = new(LocalizationManager.Instance.IsEnglish);
+
+        private readonly bool _en;
+        private ExportStrings(bool en) => _en = en;
+
+        public string DateLabel        => _en ? "Date:"        : "日期：";
+        public string DurationLabel    => _en ? "Duration:"    : "时长：";
+        public string TranscriptsLabel => _en ? "Transcripts:" : "转录条数：";
+        public string ScreenshotsLabel => _en ? "Screenshots:" : "截图数：";
+        public string DocTitle         => _en ? "Meeting Minutes" : "会议纪要";
+        public string SectionSummary   => _en ? "Summary"         : "会议总结";
+        public string SectionTopicSummaries => _en ? "Topic Summaries" : "议题摘要";
+        public string SectionTopics    => _en ? "Topics"     : "议题";
+        public string SectionDecisions => _en ? "Decisions"  : "决策";
+        public string SectionActions   => _en ? "Action Items" : "行动项";
+        public string ActionTableHeader => _en ? "| Owner | Task | Deadline |" : "| 负责人 | 任务 | 截止时间 |";
+        public string ActionTableHeaderHtml => _en ? "<th>Owner</th><th>Task</th><th>Deadline</th>" : "<th>负责人</th><th>任务</th><th>截止时间</th>";
+        public string SectionTranscript => _en ? "Transcript" : "会议记录";
+        public string Screenshot       => _en ? "Screenshot" : "截图";
+        public string ScreenshotMissing => _en ? "Screenshot (file missing)" : "截图（文件缺失）";
+        public string SpeakerNote(string name) => _en ? $" — Speaker: {name}" : $" — 发言人：{name}";
+        public string GeneratedFooter(string now) => _en ? $"Generated by MeetingQ — {now}" : $"由 MeetingQ 生成 — {now}";
+        public string SpeakerColon => _en ? ": " : "：";
+        public string DateFormat => _en ? "MMM dd, yyyy HH:mm" : "yyyy年MM月dd日 HH:mm";
+        public string HtmlLang   => _en ? "en" : "zh-CN";
+    }
+
     private static string BuildTranscriptText(SessionItem s)
     {
+        var L = ExportStrings.Current;
         var sb = new StringBuilder();
         sb.AppendLine(s.Title);
         sb.AppendLine(new string('-', s.Title.Length));
-        sb.AppendLine($"日期：{s.StartTime:yyyy年MM月dd日 HH:mm}");
-        sb.AppendLine($"时长：{s.DurationLabel}");
-        sb.AppendLine($"转录条数：{s.TranscriptCount}");
+        sb.AppendLine($"{L.DateLabel}{s.StartTime.ToString(L.DateFormat)}");
+        sb.AppendLine($"{L.DurationLabel}{s.DurationLabel}");
+        sb.AppendLine($"{L.TranscriptsLabel}{s.TranscriptCount}");
         sb.AppendLine();
         foreach (var tr in s.Transcripts)
         {
-            var speaker = string.IsNullOrEmpty(tr.Speaker) ? "" : $"{tr.Speaker}：";
+            var speaker = string.IsNullOrEmpty(tr.Speaker) ? "" : $"{tr.Speaker}{L.SpeakerColon}";
             var text = tr.Text.Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ');
             sb.AppendLine($"[{tr.TimeLabel}] {speaker}{text}");
         }
@@ -809,20 +846,21 @@ public partial class HistoryViewModel : ObservableObject
     private static string BuildMarkdown(SessionItem s, string assetRelDir,
         Dictionary<string, string> screenshotMap)
     {
+        var L = ExportStrings.Current;
         var sb = new StringBuilder();
-        sb.AppendLine($"# 会议纪要 — {s.Title}");
+        sb.AppendLine($"# {L.DocTitle} — {s.Title}");
         sb.AppendLine();
-        sb.AppendLine($"**日期：** {s.StartTime:yyyy年MM月dd日 HH:mm}  ");
-        sb.AppendLine($"**时长：** {s.DurationLabel}  ");
-        sb.AppendLine($"**转录条数：** {s.TranscriptCount}  ");
+        sb.AppendLine($"**{L.DateLabel}** {s.StartTime.ToString(L.DateFormat)}  ");
+        sb.AppendLine($"**{L.DurationLabel}** {s.DurationLabel}  ");
+        sb.AppendLine($"**{L.TranscriptsLabel}** {s.TranscriptCount}  ");
         if (s.ScreenshotPaths.Count > 0)
-            sb.AppendLine($"**截图数：** {s.ScreenshotPaths.Count}");
+            sb.AppendLine($"**{L.ScreenshotsLabel}** {s.ScreenshotPaths.Count}");
         sb.AppendLine();
 
         // ── Overall meeting summary ──
         if (!string.IsNullOrWhiteSpace(s.OverallSummary))
         {
-            sb.AppendLine("## 会议总结");
+            sb.AppendLine($"## {L.SectionSummary}");
             sb.AppendLine();
             sb.AppendLine($"{EscapeMarkdown(s.OverallSummary)}  ");
             sb.AppendLine();
@@ -834,7 +872,7 @@ public partial class HistoryViewModel : ObservableObject
             .ToList();
         if (summaryTexts.Count > 0)
         {
-            sb.AppendLine("## 议题摘要");
+            sb.AppendLine($"## {L.SectionTopicSummaries}");
             sb.AppendLine();
             foreach (var t in summaryTexts)
             {
@@ -846,7 +884,7 @@ public partial class HistoryViewModel : ObservableObject
         // ── Topics ──
         if (s.TopicTitles.Count > 0)
         {
-            sb.AppendLine("## 议题");
+            sb.AppendLine($"## {L.SectionTopics}");
             for (int i = 0; i < s.TopicTitles.Count; i++)
             {
                 sb.AppendLine($"- **{s.TopicTitles[i]}**");
@@ -859,7 +897,7 @@ public partial class HistoryViewModel : ObservableObject
         // ── Decisions ──
         if (s.HasDecisions)
         {
-            sb.AppendLine("## 决策");
+            sb.AppendLine($"## {L.SectionDecisions}");
             foreach (var d in s.Decisions)
                 sb.AppendLine($"- {EscapeMarkdown(d)}");
             sb.AppendLine();
@@ -868,8 +906,8 @@ public partial class HistoryViewModel : ObservableObject
         // ── Action Items ──
         if (s.HasActionItems)
         {
-            sb.AppendLine("## 行动项");
-            sb.AppendLine("| 负责人 | 任务 | 截止时间 |");
+            sb.AppendLine($"## {L.SectionActions}");
+            sb.AppendLine(L.ActionTableHeader);
             sb.AppendLine("|--------|------|----------|");
             foreach (var a in s.ActionItems)
                 sb.AppendLine($"| {EscapeMarkdown(a.AssignedTo)} | {EscapeMarkdown(a.Task)} | {EscapeMarkdown(a.Deadline ?? "—")} |");
@@ -879,7 +917,7 @@ public partial class HistoryViewModel : ObservableObject
         // ── Full meeting record: transcripts + screenshots chronologically ──
         if (s.HasTranscripts || s.HasScreenshots)
         {
-            sb.AppendLine("## 会议记录");
+            sb.AppendLine($"## {L.SectionTranscript}");
             sb.AppendLine();
 
             var ti = 0;
@@ -894,7 +932,7 @@ public partial class HistoryViewModel : ObservableObject
                     s.Transcripts[ti].Timestamp <= s.ScreenshotPaths[si].Timestamp))
                 {
                     var tr = s.Transcripts[ti++];
-                    var speaker = string.IsNullOrEmpty(tr.Speaker) ? "" : $"**{tr.Speaker}**：";
+                    var speaker = string.IsNullOrEmpty(tr.Speaker) ? "" : $"**{tr.Speaker}**{L.SpeakerColon}";
                     var text = tr.Text.Replace("\r\n", "  \n").Replace('\n', ' ').Replace('\r', ' ');
                     sb.AppendLine($"**{tr.TimeLabel}** {speaker}{text}  ");
                     sb.AppendLine();
@@ -904,18 +942,18 @@ public partial class HistoryViewModel : ObservableObject
                     var shot = s.ScreenshotPaths[si++];
                     if (screenshotMap.TryGetValue(shot.FilePath, out var relPath))
                     {
-                        sb.AppendLine($"![{shot.TimeLabel} 截图]({assetRelDir}/{relPath})  ");
+                        sb.AppendLine($"![{shot.TimeLabel} {L.Screenshot}]({assetRelDir}/{relPath})  ");
                         var speakerNote = !string.IsNullOrWhiteSpace(shot.ActiveSpeakerName)
-                            ? $" — 发言人：{shot.ActiveSpeakerName}" : "";
-                        sb.AppendLine($"*{shot.TimeLabel} 截图{speakerNote}*  ");
+                            ? L.SpeakerNote(shot.ActiveSpeakerName) : "";
+                        sb.AppendLine($"*{shot.TimeLabel} {L.Screenshot}{speakerNote}*  ");
                         if (!string.IsNullOrWhiteSpace(shot.AiSummary))
                             sb.AppendLine($"> {EscapeMarkdown(shot.AiSummary)}  ");
                     }
                     else
                     {
                         var speakerNote2 = !string.IsNullOrWhiteSpace(shot.ActiveSpeakerName)
-                            ? $" — 发言人：{shot.ActiveSpeakerName}" : "";
-                        sb.AppendLine($"> 📷 *{shot.TimeLabel} 截图（文件缺失）{speakerNote2}*  ");
+                            ? L.SpeakerNote(shot.ActiveSpeakerName) : "";
+                        sb.AppendLine($"> 📷 *{shot.TimeLabel} {L.ScreenshotMissing}{speakerNote2}*  ");
                         if (!string.IsNullOrWhiteSpace(shot.AiSummary))
                             sb.AppendLine($"> {EscapeMarkdown(shot.AiSummary)}  ");
                     }
@@ -925,19 +963,20 @@ public partial class HistoryViewModel : ObservableObject
         }
 
         sb.AppendLine("---");
-        sb.AppendLine($"*由 MeetingQ 生成 — {DateTime.Now:yyyy-MM-dd HH:mm}*");
+        sb.AppendLine($"*{L.GeneratedFooter(DateTime.Now.ToString("yyyy-MM-dd HH:mm"))}*");
         return sb.ToString();
     }
 
     private static string BuildHtml(SessionItem s, IReadOnlyDictionary<string, string?> dataUris)
     {
+        var L = ExportStrings.Current;
         var sb = new StringBuilder();
         sb.AppendLine("<!DOCTYPE html>");
-        sb.AppendLine("<html lang=\"zh-CN\">");
+        sb.AppendLine($"<html lang=\"{L.HtmlLang}\">");
         sb.AppendLine("<head>");
         sb.AppendLine("<meta charset=\"UTF-8\">");
         sb.AppendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
-        sb.AppendLine($"<title>会议纪要 — {EscapeHtml(s.Title)}</title>");
+        sb.AppendLine($"<title>{L.DocTitle} — {EscapeHtml(s.Title)}</title>");
         sb.AppendLine("<style>");
         sb.AppendLine("  body { font-family: -apple-system, 'Microsoft YaHei', sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; line-height: 1.7; }");
         sb.AppendLine("  h1 { border-bottom: 2px solid #2563eb; padding-bottom: 12px; }");
@@ -960,19 +999,19 @@ public partial class HistoryViewModel : ObservableObject
         sb.AppendLine("</head>");
         sb.AppendLine("<body>");
 
-        sb.AppendLine($"<h1>会议纪要 — {EscapeHtml(s.Title)}</h1>");
+        sb.AppendLine($"<h1>{L.DocTitle} — {EscapeHtml(s.Title)}</h1>");
         sb.AppendLine("<p class=\"meta\">");
-        sb.AppendLine($"<span>日期：{s.StartTime:yyyy年MM月dd日 HH:mm}</span>");
-        sb.AppendLine($"<span>时长：{s.DurationLabel}</span>");
-        sb.AppendLine($"<span>转录条数：{s.TranscriptCount}</span>");
+        sb.AppendLine($"<span>{L.DateLabel}{s.StartTime.ToString(L.DateFormat)}</span>");
+        sb.AppendLine($"<span>{L.DurationLabel}{s.DurationLabel}</span>");
+        sb.AppendLine($"<span>{L.TranscriptsLabel}{s.TranscriptCount}</span>");
         if (s.ScreenshotPaths.Count > 0)
-            sb.AppendLine($"<span>截图数：{s.ScreenshotPaths.Count}</span>");
+            sb.AppendLine($"<span>{L.ScreenshotsLabel}{s.ScreenshotPaths.Count}</span>");
         sb.AppendLine("</p>");
 
         // ── Overall meeting summary ──
         if (!string.IsNullOrWhiteSpace(s.OverallSummary))
         {
-            sb.AppendLine("<h2>会议总结</h2>");
+            sb.AppendLine($"<h2>{L.SectionSummary}</h2>");
             sb.AppendLine($"<p>{EscapeHtml(s.OverallSummary)}</p>");
         }
 
@@ -982,7 +1021,7 @@ public partial class HistoryViewModel : ObservableObject
             .ToList();
         if (summaryTextsHtml.Count > 0)
         {
-            sb.AppendLine("<h2>议题摘要</h2>");
+            sb.AppendLine($"<h2>{L.SectionTopicSummaries}</h2>");
             foreach (var t in summaryTextsHtml)
                 sb.AppendLine($"<p>{EscapeHtml(t)}</p>");
         }
@@ -990,7 +1029,7 @@ public partial class HistoryViewModel : ObservableObject
         // Topics
         if (s.TopicTitles.Count > 0)
         {
-            sb.AppendLine("<h2>议题</h2><ul>");
+            sb.AppendLine($"<h2>{L.SectionTopics}</h2><ul>");
             for (int i = 0; i < s.TopicTitles.Count; i++)
             {
                 var summary = i < s.TopicSummaries.Count && !string.IsNullOrWhiteSpace(s.TopicSummaries[i])
@@ -1004,7 +1043,7 @@ public partial class HistoryViewModel : ObservableObject
         // Decisions
         if (s.HasDecisions)
         {
-            sb.AppendLine("<h2>决策</h2><ul>");
+            sb.AppendLine($"<h2>{L.SectionDecisions}</h2><ul>");
             foreach (var d in s.Decisions)
                 sb.AppendLine($"<li>{EscapeHtml(d)}</li>");
             sb.AppendLine("</ul>");
@@ -1013,8 +1052,8 @@ public partial class HistoryViewModel : ObservableObject
         // Action Items
         if (s.HasActionItems)
         {
-            sb.AppendLine("<h2>行动项</h2>");
-            sb.AppendLine("<table><thead><tr><th>负责人</th><th>任务</th><th>截止时间</th></tr></thead><tbody>");
+            sb.AppendLine($"<h2>{L.SectionActions}</h2>");
+            sb.AppendLine($"<table><thead><tr>{L.ActionTableHeaderHtml}</tr></thead><tbody>");
             foreach (var a in s.ActionItems)
                 sb.AppendLine($"<tr><td>{EscapeHtml(a.AssignedTo)}</td><td>{EscapeHtml(a.Task)}</td><td>{EscapeHtml(a.Deadline ?? "—")}</td></tr>");
             sb.AppendLine("</tbody></table>");
@@ -1023,7 +1062,7 @@ public partial class HistoryViewModel : ObservableObject
         // Full meeting record: transcripts + screenshots (at bottom)
         if (s.HasTranscripts || s.HasScreenshots)
         {
-            sb.AppendLine("<h2>会议记录</h2>");
+            sb.AppendLine($"<h2>{L.SectionTranscript}</h2>");
 
             var ti = 0;
             var si = 0;
@@ -1037,7 +1076,7 @@ public partial class HistoryViewModel : ObservableObject
                 {
                     var tr = s.Transcripts[ti++];
                     var speaker = string.IsNullOrEmpty(tr.Speaker)
-                        ? "" : $"<span class=\"speaker\">{EscapeHtml(tr.Speaker)}：</span>";
+                        ? "" : $"<span class=\"speaker\">{EscapeHtml(tr.Speaker)}{L.SpeakerColon}</span>";
                     sb.AppendLine($"<div class=\"transcript-entry\"><span class=\"ts\">{tr.TimeLabel}</span> {speaker}{EscapeHtml(tr.Text)}</div>");
                 }
                 else
@@ -1047,10 +1086,10 @@ public partial class HistoryViewModel : ObservableObject
                     if (dataUri is not null)
                     {
                         sb.AppendLine("<div class=\"screenshot-block\">");
-                        sb.AppendLine($"<img src=\"{dataUri}\" alt=\"{shot.TimeLabel} 截图\" loading=\"lazy\">");
+                        sb.AppendLine($"<img src=\"{dataUri}\" alt=\"{shot.TimeLabel} {L.Screenshot}\" loading=\"lazy\">");
                         var htmlSpeakerNote = !string.IsNullOrWhiteSpace(shot.ActiveSpeakerName)
-                            ? $" — 发言人：{EscapeHtml(shot.ActiveSpeakerName)}" : "";
-                        sb.AppendLine($"<div class=\"screenshot-label\">{shot.TimeLabel} 截图{htmlSpeakerNote}</div>");
+                            ? L.SpeakerNote(EscapeHtml(shot.ActiveSpeakerName)) : "";
+                        sb.AppendLine($"<div class=\"screenshot-label\">{shot.TimeLabel} {L.Screenshot}{htmlSpeakerNote}</div>");
                         if (!string.IsNullOrWhiteSpace(shot.AiSummary))
                             sb.AppendLine($"<p style=\"color:#6b7280;font-size:13px;margin-top:4px\">{EscapeHtml(shot.AiSummary)}</p>");
                         sb.AppendLine("</div>");
@@ -1058,8 +1097,8 @@ public partial class HistoryViewModel : ObservableObject
                     else
                     {
                         var htmlSpeakerNote2 = !string.IsNullOrWhiteSpace(shot.ActiveSpeakerName)
-                            ? $" — 发言人：{EscapeHtml(shot.ActiveSpeakerName)}" : "";
-                        sb.AppendLine($"<div class=\"screenshot-block\"><p>📷 {shot.TimeLabel} 截图（文件缺失）{htmlSpeakerNote2}</p>");
+                            ? L.SpeakerNote(EscapeHtml(shot.ActiveSpeakerName)) : "";
+                        sb.AppendLine($"<div class=\"screenshot-block\"><p>📷 {shot.TimeLabel} {L.ScreenshotMissing}{htmlSpeakerNote2}</p>");
                         if (!string.IsNullOrWhiteSpace(shot.AiSummary))
                             sb.AppendLine($"<p style=\"color:#6b7280;font-size:13px\">{EscapeHtml(shot.AiSummary)}</p>");
                         sb.AppendLine("</div>");
@@ -1068,7 +1107,7 @@ public partial class HistoryViewModel : ObservableObject
             }
         }
 
-        sb.AppendLine($"<footer>由 MeetingQ 生成 — {DateTime.Now:yyyy-MM-dd HH:mm}</footer>");
+        sb.AppendLine($"<footer>{L.GeneratedFooter(DateTime.Now.ToString("yyyy-MM-dd HH:mm"))}</footer>");
         sb.AppendLine("</body></html>");
         return sb.ToString();
     }

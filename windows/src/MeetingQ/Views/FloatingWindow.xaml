@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:MeetingQ.ViewModels"
+        xmlns:local="clr-namespace:MeetingQ.Infrastructure"
         mc:Ignorable="d"
         Title="MeetingQ"
         Width="320" Height="440"
@@ -223,7 +224,7 @@
                                 Margin="0,0,2,0">
                         <Button Content="●"
                                 Command="{Binding ToggleDiagnosticsCommand}"
-                                ToolTip="自检状态">
+                                ToolTip="{local:Loc FloatDiagTooltip}">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource IconBtn}">
                                     <Setter Property="Visibility" Value="Collapsed"/>
@@ -241,15 +242,15 @@
                         <Button Content="⧉"
                                 Style="{StaticResource IconBtn}"
                                 Click="OpenHistory_Click"
-                                ToolTip="历史会议"/>
+                                ToolTip="{local:Loc HistoryTitle}"/>
                         <Button Content="⚙"
                                 Style="{StaticResource IconBtn}"
                                 Click="OpenSettings_Click"
-                                ToolTip="设置"/>
+                                ToolTip="{local:Loc SettingsTooltip}"/>
                         <Button Content="▾"
                                 Style="{StaticResource IconBtn}"
                                 Click="CloseButton_Click"
-                                ToolTip="隐藏到托盘"/>
+                                ToolTip="{local:Loc FloatHideToTray}"/>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -311,7 +312,7 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0"
-                               Text="截图窗口"
+                               Text="{local:Loc FloatCaptureWindow}"
                                Foreground="#777777"
                                FontSize="11"
                                VerticalAlignment="Center"
@@ -338,7 +339,7 @@
                         </ComboBox.Resources>
                     </ComboBox>
                     <TextBlock Grid.Column="1"
-                               Text="未检测到可捕获窗口"
+                               Text="{local:Loc FloatNoWindow}"
                                Foreground="#AAAAAA"
                                FontSize="11"
                                VerticalAlignment="Center"
@@ -363,7 +364,7 @@
                             Content="↺"
                             Style="{StaticResource IconBtn}"
                             Command="{Binding RefreshWindowsCommand}"
-                            ToolTip="刷新窗口列表"
+                            ToolTip="{local:Loc FloatRefreshWindows}"
                             FontSize="14"
                             Width="26" Height="26"
                             Margin="6,0,0,0"/>
@@ -471,7 +472,7 @@
                                RadiusX="2" RadiusY="2"
                                Fill="#6366F1"/>
                     <StackPanel Margin="11,0,0,0">
-                        <TextBlock Text="当前议题"
+                        <TextBlock Text="{local:Loc CurrentTopic}"
                                    Foreground="#777777"
                                    FontSize="10"
                                    Margin="0,0,0,2"/>
@@ -492,7 +493,7 @@
                     BorderBrush="#DDDDDD"
                     BorderThickness="1">
                 <Grid>
-                    <TextBlock Text="等待语音输入…"
+                    <TextBlock Text="{local:Loc FloatWaitingVoice}"
                                Foreground="#BBBBBB"
                                FontSize="12"
                                HorizontalAlignment="Center"
@@ -545,13 +546,13 @@
                 </Border.Style>
                 <Grid Margin="10,7,10,7">
                     <!-- Label row -->
-                    <TextBlock Text="AI 摘要"
+                    <TextBlock Text="{local:Loc FloatAiSummary}"
                                Foreground="#777777"
                                FontSize="10"
                                FontWeight="SemiBold"
                                VerticalAlignment="Top"/>
                     <!-- Loading indicator -->
-                    <TextBlock Text="生成中…"
+                    <TextBlock Text="{local:Loc CommonGenerating}"
                                Foreground="#AAAAAA"
                                FontSize="11"
                                HorizontalAlignment="Right"
@@ -590,7 +591,7 @@
                         <!-- Screenshot album button (visible during and after session) -->
                         <Button Padding="8,4"
                                 Margin="0,2,4,2"
-                                Content="📷 截图"
+                                Content="{local:Loc FloatScreenshotBtn}"
                                 Command="{Binding OpenScreenshotAlbumCommand}">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource GhostBtn}">
@@ -616,7 +617,7 @@
                         <!-- Quick summary button (visible during and after session) -->
                         <Button Padding="8,4"
                                 Margin="0,2,4,2"
-                                Content="⚡ 摘要"
+                                Content="{local:Loc FloatSummaryBtn}"
                                 Command="{Binding ShowQuickSummaryCommand}">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource GhostBtn}">
@@ -640,13 +641,13 @@
                                 <Style TargetType="Button" BasedOn="{StaticResource GhostBtn}">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Setter Property="Foreground"  Value="#D97706"/>
-                                    <Setter Property="Content"     Value="🔔 被叫到"/>
+                                    <Setter Property="Content"     Value="{local:Loc FloatAlertBtn}"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsMonitoring}" Value="True">
                                             <Setter Property="Visibility" Value="Visible"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding IsManualAlertRunning}" Value="True">
-                                            <Setter Property="Content" Value="收集中…"/>
+                                            <Setter Property="Content" Value="{local:Loc FloatCollecting}"/>
                                             <Setter Property="Foreground" Value="#818CF8"/>
                                         </DataTrigger>
                                     </Style.Triggers>
@@ -660,14 +661,14 @@
                                 Command="{Binding RunSelfTestCommand}">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource GhostBtn}">
-                                    <Setter Property="Content" Value="功能自检"/>
+                                    <Setter Property="Content" Value="{local:Loc FloatSelfTest}"/>
                                     <Setter Property="Visibility" Value="Visible"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsMonitoring}" Value="True">
                                             <Setter Property="Visibility" Value="Collapsed"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding IsSelfTestRunning}" Value="True">
-                                            <Setter Property="Content" Value="自检中…"/>
+                                            <Setter Property="Content" Value="{local:Loc FloatSelfTestRunning}"/>
                                             <Setter Property="Foreground" Value="#818CF8"/>
                                         </DataTrigger>
                                     </Style.Triggers>
@@ -684,18 +685,18 @@
                                 Template="{StaticResource PillBtnTemplate}">
                             <Button.Style>
                                 <Style TargetType="Button">
-                                    <Setter Property="Content"    Value="开始监听"/>
+                                    <Setter Property="Content"    Value="{local:Loc FloatStartListening}"/>
                                     <Setter Property="Background" Value="#6366F1"/>
                                     <Setter Property="Foreground" Value="White"/>
                                     <Setter Property="BorderThickness" Value="0"/>
                                     <Setter Property="Command"    Value="{Binding StartListeningCommand}"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsStarting}" Value="True">
-                                            <Setter Property="Content"    Value="启动中…"/>
+                                            <Setter Property="Content"    Value="{local:Loc FloatStarting}"/>
                                             <Setter Property="IsEnabled"  Value="False"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding IsMonitoring}" Value="True">
-                                            <Setter Property="Content"    Value="停止监听"/>
+                                            <Setter Property="Content"    Value="{local:Loc FloatStopListening}"/>
                                             <Setter Property="Background" Value="#EF4444"/>
                                             <Setter Property="Command"    Value="{Binding StopListeningCommand}"/>
                                         </DataTrigger>

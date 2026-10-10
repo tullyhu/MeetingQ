@@ -100,7 +100,7 @@ public class AudioCaptureService : IAudioCaptureService
             using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
             CurrentDeviceName = device.FriendlyName;
         }
-        catch { CurrentDeviceName = "默认播放设备"; }
+        catch { CurrentDeviceName = LocalizationManager.Get("AudioDefaultPlaybackDevice"); }
 
         _capture = new WasapiLoopbackCapture();
         AppLog.Info<AudioCaptureService>($"WASAPI loopback format={_capture.WaveFormat}  device={CurrentDeviceName}");

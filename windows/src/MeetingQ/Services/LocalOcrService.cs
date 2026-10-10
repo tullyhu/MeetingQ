@@ -23,10 +23,26 @@ public partial class LocalOcrService
     [GeneratedRegex(@"(?<count>\d{1,2})\s*人(?:参会|与会|在会)|参会人数[:：]?\s*(?<count>\d{1,2})|(?<count>\d{1,2})\s*位参会")]
     private static partial Regex ParticipantCountRegex();
 
+    // English equivalents, used when the UI language is English:
+    // "John is speaking" / "Jane (speaking)" / "Speaking: John".
+    [GeneratedRegex(@"(?<name>[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,2})\s*(?:\(?(?:is\s+)?speaking(?:\s+now)?\)?)", RegexOptions.IgnoreCase)]
+    private static partial Regex NameBeforeIndicatorEnRegex();
+
+    [GeneratedRegex(@"(?:speaking|speaker|presenter)\s*[:：]?\s*(?<name>[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,2})", RegexOptions.IgnoreCase)]
+    private static partial Regex NameAfterIndicatorEnRegex();
+
+    [GeneratedRegex(@"(?<count>\d{1,2})\s*participants|participants\s*[:：]?\s*(?<count>\d{1,2})", RegexOptions.IgnoreCase)]
+    private static partial Regex ParticipantCountEnRegex();
+
     // Words the indicator regex may capture that are not real names.
     private static readonly HashSet<string> NameBlacklist =
         ["正在", "发言", "讲话", "说话", "大家", "会议", "当前", "全员", "有人", "无人", "主讲",
          "主持人", "现在", "目前", "各位", "所有人", "参会人", "与会者"];
+
+    // English stop words (checked case-insensitively).
+    private static readonly HashSet<string> NameBlacklistEn = new(StringComparer.OrdinalIgnoreCase)
+        { "speaking", "speaker", "participants", "meeting", "everyone", "current",
+          "host", "presenter", "now", "all" };
 
     public async Task<string?> OcrAsync(string imagePath, CancellationToken ct = default)
     {
@@ -64,7 +80,11 @@ public partial class LocalOcrService
                 Windows.Media.Ocr.OcrResult result;
                 using (bitmap)
                 {
-                    var engine = Windows.Media.Ocr.OcrEngine.TryCreateFromLanguage(
+                    var engine = (LocalizationManager.Instance.IsEnglish
+                                     ? Windows.Media.Ocr.OcrEngine.TryCreateFromLanguage(
+                                           new Windows.Globalization.Language("en"))
+                                     : null)
+                                 ?? Windows.Media.Ocr.OcrEngine.TryCreateFromLanguage(
                                      new Windows.Globalization.Language("zh-Hans-CN"))
                                  ?? Windows.Media.Ocr.OcrEngine.TryCreateFromUserProfileLanguages();
                     if (engine is null)
@@ -97,6 +117,21 @@ public partial class LocalOcrService
     {
         if (string.IsNullOrWhiteSpace(ocrText)) return null;
 
+        if (LocalizationManager.Instance.IsEnglish)
+        {
+            foreach (var regex in new[] { NameBeforeIndicatorEnRegex(), NameAfterIndicatorEnRegex() })
+            {
+                var m = regex.Match(ocrText);
+                if (m.Success)
+                {
+                    var name = m.Groups["name"].Value;
+                    if (!NameBlacklistEn.Contains(name))
+                        return name;
+                }
+            }
+            return null;
+        }
+
         foreach (var regex in new[] { NameBeforeIndicatorRegex(), NameAfterIndicatorRegex() })
         {
             var m = regex.Match(ocrText);
@@ -113,7 +148,10 @@ public partial class LocalOcrService
     public static int? ExtractParticipantCount(string? ocrText)
     {
         if (string.IsNullOrWhiteSpace(ocrText)) return null;
-        var m = ParticipantCountRegex().Match(ocrText);
+        var regex = LocalizationManager.Instance.IsEnglish
+            ? ParticipantCountEnRegex()
+            : ParticipantCountRegex();
+        var m = regex.Match(ocrText);
         if (!m.Success) return null;
         foreach (var g in m.Groups["count"].Captures.Cast<System.Text.RegularExpressions.Capture>())
         {

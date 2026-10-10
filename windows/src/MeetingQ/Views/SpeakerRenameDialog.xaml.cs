@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using MeetingQ.Infrastructure;
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -38,12 +39,12 @@ public partial class SpeakerRenameDialog : Window
         var newName = row.NewName.Trim();
         if (string.IsNullOrWhiteSpace(newName))
         {
-            HintText.Text = "名称不能为空";
+            HintText.Text = LocalizationManager.Get("SpeakerRenameNameEmpty");
             return;
         }
         if (newName == row.OldName)
         {
-            HintText.Text = "名称未变化，无需修改";
+            HintText.Text = LocalizationManager.Get("SpeakerRenameNameUnchanged");
             return;
         }
 
@@ -54,7 +55,7 @@ public partial class SpeakerRenameDialog : Window
             var ok = await _rename(row.OldName, newName);
             if (!ok)
             {
-                HintText.Text = "修正失败，请查看历史窗口状态栏";
+                HintText.Text = LocalizationManager.Get("SpeakerRenameFailed");
                 return;
             }
 

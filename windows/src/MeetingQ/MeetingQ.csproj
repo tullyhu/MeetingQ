@@ -8,6 +8,7 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>MeetingQ</AssemblyName>
     <RootNamespace>MeetingQ</RootNamespace>
+    <Version>1.7.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>AnyCPU</Platforms>
     <PlatformTarget>x64</PlatformTarget>

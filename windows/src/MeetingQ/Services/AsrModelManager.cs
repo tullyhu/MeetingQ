@@ -118,7 +118,7 @@ public static class AsrModelManager
             var tmp = file.LocalPath + ".tmp";
             try
             {
-                progress?.Report($"正在下载模型 {fileName} ...");
+                progress?.Report(LocalizationManager.Format("AsrModelDownloading", fileName));
                 AppLog.Info("AsrModelManager", $"Downloading {url}");
 
                 using (var resp = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct))
@@ -130,7 +130,8 @@ public static class AsrModelManager
                 }
 
                 if (new FileInfo(tmp).Length < file.MinSizeBytes)
-                    throw new InvalidDataException($"文件过小（{new FileInfo(tmp).Length} bytes），可能已损坏");
+                    throw new InvalidDataException(
+                        LocalizationManager.Format("AsrModelFileTooSmall", new FileInfo(tmp).Length));
 
                 File.Move(tmp, file.LocalPath, overwrite: true);
                 AppLog.Info("AsrModelManager", $"Downloaded {fileName}");
@@ -150,7 +151,7 @@ public static class AsrModelManager
         }
 
         throw new InvalidOperationException(
-            $"模型 {fileName} 下载失败，请检查网络后重试。", lastError);
+            LocalizationManager.Format("AsrModelDownloadFailed", fileName), lastError);
     }
 
     private static void TryDelete(string path)

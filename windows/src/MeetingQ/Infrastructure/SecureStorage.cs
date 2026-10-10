@@ -89,6 +89,9 @@ public static class SecureStorageKeys
     // First-run flags
     public const string PrivacyAccepted    = "privacy_accepted";
 
+    // UI language: "system" (default, follows OS) / "zh-CN" / "en"
+    public const string Language           = "language";
+
     // Multimodal / Vision
     public const string MultimodalEnabled    = "multimodal_enabled";
     public const string VisionEnabled        = "vision_enabled";

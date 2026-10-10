@@ -47,6 +47,24 @@ public class NameDetectionService : INameDetectionService, IDisposable
     private static readonly string[] RoleWords =
         { "主持人", "老师", "经理", "主管", "领导", "组长", "总监", "老板", "书记" };
 
+    // English equivalents, used when the UI language is English.
+    private static readonly string[] InterrogativeWordsEn =
+        { "what", "how", "why", "where", "which", "who", "when", "whose", "whom",
+          "is", "are", "do", "does", "did", "can", "could", "would", "should", "shall" };
+
+    private static readonly string[] DirectedPhrasesEn =
+        { "what do you think", "do you think", "your opinion", "your thoughts",
+          "can you", "could you", "what about you", "how about you", "tell us",
+          "over to you", "your take", "would you" };
+
+    private static readonly string[] RoleWordsEn =
+        { "host", "manager", "lead", "leader", "boss", "director", "chair", "moderator" };
+
+    // Word-boundary matcher for English interrogatives (avoids "is" matching "this").
+    private static readonly Regex InterrogativeWordsEnRegex = new(
+        @"\b(?:" + string.Join("|", InterrogativeWordsEn) + @")\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     public NameDetectionService(ILlmService llmService, ILogger<NameDetectionService> logger)
     {
         _llmService = llmService;
@@ -226,18 +244,35 @@ public class NameDetectionService : INameDetectionService, IDisposable
         }
     }
 
-    // ── Layer 1: Chinese patterns ───────────────────────────────────────
+    // ── Layer 1: question / directed-speech patterns ────────────────────
 
     private DetectionResult RunLayer1(string text)
     {
-        // Check if text ends with a question particle (common in Mandarin questions)
-        bool endsWithQuestion = QuestionParticles.Any(p => text.TrimEnd('，', '。', '！', ' ').EndsWith(p));
+        var isEnglish = LocalizationManager.Instance.IsEnglish;
 
-        // Check for interrogative words (疑问词)
-        bool hasInterrogative = InterrogativeWords.Any(w => text.Contains(w));
+        bool endsWithQuestion;
+        bool hasInterrogative;
+        bool hasDirectedPhrase;
 
-        // Check for phrases explicitly directed at the user
-        bool hasDirectedPhrase = DirectedPhrases.Any(p => text.Contains(p));
+        if (isEnglish)
+        {
+            // English: a trailing '?' is the question signal.
+            endsWithQuestion = text.TrimEnd().EndsWith('?');
+            hasInterrogative = InterrogativeWordsEnRegex.IsMatch(text);
+            hasDirectedPhrase = DirectedPhrasesEn.Any(p =>
+                text.Contains(p, StringComparison.OrdinalIgnoreCase));
+        }
+        else
+        {
+            // Check if text ends with a question particle (common in Mandarin questions)
+            endsWithQuestion = QuestionParticles.Any(p => text.TrimEnd('，', '。', '！', ' ').EndsWith(p));
+
+            // Check for interrogative words (疑问词)
+            hasInterrogative = InterrogativeWords.Any(w => text.Contains(w));
+
+            // Check for phrases explicitly directed at the user
+            hasDirectedPhrase = DirectedPhrases.Any(p => text.Contains(p));
+        }
 
         // "你觉得…"-style phrases alone are usually aimed at someone else — only treat
         // them as directed when the text also names the user (or a role they hold).
@@ -274,6 +309,9 @@ public class NameDetectionService : INameDetectionService, IDisposable
     {
         if (_nameRegex?.IsMatch(text) == true) return true;
         if (!string.IsNullOrEmpty(_userRole) && text.Contains(_userRole)) return true;
+        if (LocalizationManager.Instance.IsEnglish)
+            return RoleWordsEn.Any(w => Regex.IsMatch(text, $@"\b{Regex.Escape(w)}\b",
+                RegexOptions.IgnoreCase));
         return RoleWords.Any(w => text.Contains(w));
     }
 
@@ -284,14 +322,34 @@ public class NameDetectionService : INameDetectionService, IDisposable
         DetectionResult preliminary,
         CancellationToken cancellationToken)
     {
-        var namesHint = _loadedNames.Length > 0
-            ? $"用户姓名/昵称：{string.Join("、", _loadedNames)}"
-            : "（用户未配置名字）";
-        var roleHint = string.IsNullOrEmpty(_userRole) ? string.Empty
-            : $"\n用户角色：{_userRole}（可据此判断该角色相关的职责性问题是否指向该用户）";
+        var isEnglish = LocalizationManager.Instance.IsEnglish;
 
-        var prompt =
-            $$"""
+        var namesHint = isEnglish
+            ? (_loadedNames.Length > 0
+                ? $"User's name/nicknames: {string.Join(", ", _loadedNames)}"
+                : "(user has not configured a name)")
+            : (_loadedNames.Length > 0
+                ? $"用户姓名/昵称：{string.Join("、", _loadedNames)}"
+                : "（用户未配置名字）");
+        var roleHint = string.IsNullOrEmpty(_userRole) ? string.Empty
+            : isEnglish
+                ? $"\nUser's role: {_userRole} (use this to judge whether duty-related questions about this role are directed at the user)"
+                : $"\n用户角色：{_userRole}（可据此判断该角色相关的职责性问题是否指向该用户）";
+
+        var prompt = isEnglish
+            ? $$"""
+            {{namesHint}}{{roleHint}}
+
+            Someone said in a meeting: "{{text}}"
+
+            Determine whether this sentence is directed at the user above:
+            - Criteria: the user's name or nickname appears in the sentence (including homophone misrecognitions by speech recognition), or there is explicit context addressing the user, or the question clearly relates to the user's role/duties and the context implicitly points at the user.
+            - Note: generic "you" / "your" without the user's name usually means someone else is being addressed — return directed=false in that case.
+
+            Return JSON only, format: {"directed":true,"questions":["specific question"]}
+            If not directed at the user: {"directed":false,"questions":[]}
+            """
+            : $$"""
             {{namesHint}}{{roleHint}}
 
             会议中说了这句话："{{text}}"

@@ -26,20 +26,33 @@ public class ConfigurableLlmService : ILlmService
     }
 
     public Task<string> AnalyzeAsync(string prompt, CancellationToken cancellationToken = default)
-        => ChatAsync("你是会议助手，请简洁准确地回答。", prompt, cancellationToken);
+    {
+        var sys = LocalizationManager.Instance.IsEnglish
+            ? "You are a meeting assistant. Answer concisely and accurately."
+            : "你是会议助手，请简洁准确地回答。";
+        return ChatAsync(sys, prompt, cancellationToken);
+    }
 
     public Task<string> SummarizeAsync(IEnumerable<Transcript> transcripts, CancellationToken cancellationToken = default)
     {
         var combined = string.Join("\n", transcripts.Select(t => t.Text));
+        var isEnglish = LocalizationManager.Instance.IsEnglish;
         if (string.IsNullOrWhiteSpace(combined))
-            return Task.FromResult(JsonSerializer.Serialize(new { summary = "暂无内容", decisions = Array.Empty<string>() }));
+            return Task.FromResult(JsonSerializer.Serialize(new
+            {
+                summary = isEnglish ? "No content" : "暂无内容",
+                decisions = Array.Empty<string>()
+            }));
 
-        var prompt =
-            $"请分析以下会议转录内容，以JSON格式返回，格式：{{\"summary\":\"要点摘要\",\"decisions\":[\"决策1\",\"决策2\"]}}\n\n转录内容：\n{combined}";
+        var prompt = isEnglish
+            ? $"Analyze the following meeting transcript and return JSON in this format: {{\"summary\":\"key points summary\",\"decisions\":[\"decision 1\",\"decision 2\"]}}\n\nTranscript:\n{combined}"
+            : $"请分析以下会议转录内容，以JSON格式返回，格式：{{\"summary\":\"要点摘要\",\"decisions\":[\"决策1\",\"决策2\"]}}\n\n转录内容：\n{combined}";
 
-        return ChatAsync(
-            "你是会议纪要助手，请用简洁的中文总结会议内容，只返回JSON，不要其他内容。",
-            prompt, cancellationToken);
+        var sys = isEnglish
+            ? "You are a meeting-minutes assistant. Summarize the meeting in concise English. Return JSON only, no other content."
+            : "你是会议纪要助手，请用简洁的中文总结会议内容，只返回JSON，不要其他内容。";
+
+        return ChatAsync(sys, prompt, cancellationToken);
     }
 
     public Task<string> TestAsync(CancellationToken cancellationToken = default)
@@ -70,18 +83,18 @@ public class ConfigurableLlmService : ILlmService
         {
             var profile = LlmProfileStore.GetActive();
             if (profile is null)
-                throw new InvalidOperationException("未配置 LLM 接口，请在设置 → 大模型 中添加并激活一个配置");
+                throw new InvalidOperationException(LocalizationManager.Get("LlmNotConfigured"));
             baseUrl = profile.BaseUrl;
             apiKey = profile.ApiKey;
             model = modelOverride ?? profile.VisionModelId ?? profile.ModelId;
         }
 
         if (string.IsNullOrWhiteSpace(baseUrl))
-            throw new InvalidOperationException("Vision 接口地址未配置");
+            throw new InvalidOperationException(LocalizationManager.Get("LlmVisionNoBaseUrl"));
         if (string.IsNullOrWhiteSpace(apiKey))
-            throw new InvalidOperationException("Vision API Key 未配置");
+            throw new InvalidOperationException(LocalizationManager.Get("LlmVisionNoApiKey"));
         if (string.IsNullOrWhiteSpace(model))
-            throw new InvalidOperationException("Vision 模型 ID 未配置");
+            throw new InvalidOperationException(LocalizationManager.Get("LlmVisionNoModelId"));
 
         // Build OpenAI content-array format for multimodal request.
         var messagesArray = new JsonArray
@@ -139,13 +152,13 @@ public class ConfigurableLlmService : ILlmService
         var profile = LlmProfileStore.GetActive();
 
         if (profile is null)
-            throw new InvalidOperationException("未配置 LLM 接口，请在设置 → 大模型 中添加并激活一个配置");
+            throw new InvalidOperationException(LocalizationManager.Get("LlmNotConfigured"));
 
         if (string.IsNullOrWhiteSpace(profile.ApiKey))
-            throw new InvalidOperationException($"LLM 配置「{profile.Name}」的 API Key 为空");
+            throw new InvalidOperationException(LocalizationManager.Format("LlmProfileNoApiKey", profile.Name));
 
         if (string.IsNullOrWhiteSpace(profile.BaseUrl))
-            throw new InvalidOperationException($"LLM 配置「{profile.Name}」的接口地址为空");
+            throw new InvalidOperationException(LocalizationManager.Format("LlmProfileNoBaseUrl", profile.Name));
 
         var url = profile.BaseUrl.TrimEnd('/') + "/chat/completions";
 
@@ -181,7 +194,7 @@ public class ConfigurableLlmService : ILlmService
             {
                 _logger.LogError("[LLM] HTTP {Status}: {Body}", (int)response.StatusCode,
                     TruncateForLog(responseBody));
-                throw new HttpRequestException($"LLM 返回错误 (HTTP {(int)response.StatusCode})，请检查 API Key 和接口配置",
+                throw new HttpRequestException(LocalizationManager.Format("LlmHttpError", (int)response.StatusCode),
                     null, response.StatusCode);
             }
 

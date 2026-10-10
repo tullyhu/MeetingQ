@@ -36,8 +36,8 @@ public partial class SettingsWindow : Window
     private void OnRestartRequired()
     {
         var result = MessageBox.Show(
-            "数据目录已更改，需要重启应用才能生效。\n\n立即重启？",
-            "需要重启",
+            LocalizationManager.Get("RestartBody"),
+            LocalizationManager.Get("RestartTitle"),
             MessageBoxButton.OKCancel,
             MessageBoxImage.Information);
 
@@ -52,8 +52,8 @@ public partial class SettingsWindow : Window
             else
             {
                 MessageBox.Show(
-                    "无法自动重启应用，请手动关闭并重新启动 MeetingQ。",
-                    "需要手动重启",
+                    LocalizationManager.Get("ManualRestartBody"),
+                    LocalizationManager.Get("ManualRestartTitle"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 Close();
@@ -72,7 +72,7 @@ public partial class SettingsWindow : Window
     {
         var dlg = new OpenFolderDialog
         {
-            Title          = "选择 MeetingQ 数据存储目录",
+            Title          = LocalizationManager.Get("BrowseDataDirTitle"),
             InitialDirectory = currentPath,
             Multiselect    = false
         };
@@ -84,8 +84,8 @@ public partial class SettingsWindow : Window
     private bool OnConfirmClear()
     {
         var result = MessageBox.Show(
-            "确定要清空所有配置吗？\n\n这将删除：姓名、API Key、大模型配置、ASR 凭证等所有设置。\n会议记录（数据库）不受影响。",
-            "清空配置",
+            LocalizationManager.Get("ClearConfigBody"),
+            LocalizationManager.Get("ClearConfigTitle"),
             MessageBoxButton.OKCancel,
             MessageBoxImage.Warning);
         return result == MessageBoxResult.OK;
@@ -94,7 +94,7 @@ public partial class SettingsWindow : Window
     private bool OnConfirmDataClear(string message)
     {
         var result = MessageBox.Show(
-            message, "清空数据",
+            message, LocalizationManager.Get("ClearDataTitle"),
             MessageBoxButton.OKCancel,
             MessageBoxImage.Warning);
         return result == MessageBoxResult.OK;
@@ -123,10 +123,11 @@ public partial class SettingsWindow : Window
     {
         var dlg = new SaveFileDialog
         {
-            Title      = "导出配置文件",
+            Title      = LocalizationManager.Get("ExportConfigTitle"),
             FileName   = defaultName,
             DefaultExt = ".json",
-            Filter     = "JSON 文件 (*.json)|*.json|所有文件 (*.*)|*.*"
+            Filter     = string.Join('|', LocalizationManager.Get("FileFilterJson"),
+                         LocalizationManager.Get("FileFilterAll"))
         };
         return dlg.ShowDialog(this) == true ? dlg.FileName : null;
     }
@@ -135,10 +136,11 @@ public partial class SettingsWindow : Window
     {
         var dlg = new OpenFileDialog
         {
-            Title      = "导入配置文件",
+            Title      = LocalizationManager.Get("ImportConfigTitle"),
             FileName   = defaultName,
             DefaultExt = ".json",
-            Filter     = "JSON 文件 (*.json)|*.json|所有文件 (*.*)|*.*",
+            Filter     = string.Join('|', LocalizationManager.Get("FileFilterJson"),
+                         LocalizationManager.Get("FileFilterAll")),
             Multiselect = false
         };
         return dlg.ShowDialog(this) == true ? dlg.FileName : null;
@@ -147,7 +149,7 @@ public partial class SettingsWindow : Window
     private bool OnConfirmConfigOverwrite(string message)
     {
         var result = MessageBox.Show(
-            message, "导入配置",
+            message, LocalizationManager.Get("ImportConfirmTitle"),
             MessageBoxButton.OKCancel,
             MessageBoxImage.Warning);
         return result == MessageBoxResult.OK;
@@ -171,7 +173,7 @@ public partial class SettingsWindow : Window
     {
         var btn = (Button)sender;
         btn.IsEnabled = false;
-        btn.Content   = "📋 收集中...";
+        btn.Content   = LocalizationManager.Get("CollectingLogs");
         try
         {
             var reportDir  = System.IO.Path.Combine(
@@ -183,13 +185,13 @@ public partial class SettingsWindow : Window
 
             var sb = new System.Text.StringBuilder();
             sb.AppendLine("╔══════════════════════════════════╗");
-            sb.AppendLine("║   MeetingQ  诊断报告           ║");
+            sb.AppendLine($"║   {LocalizationManager.Get("DiagReportTitle")}           ║");
             sb.AppendLine("╚══════════════════════════════════╝");
-            sb.AppendLine($"生成时间    : {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-            sb.AppendLine($"操作系统    : {Environment.OSVersion}");
-            sb.AppendLine($".NET 运行时 : {Environment.Version}");
-            sb.AppendLine($"进程架构    : {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}");
-            sb.AppendLine($"托管内存    : {GC.GetTotalMemory(false) / 1024 / 1024} MB");
+            sb.AppendLine($"{LocalizationManager.Get("DiagGeneratedAt")}    : {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine($"{LocalizationManager.Get("DiagOs")}    : {Environment.OSVersion}");
+            sb.AppendLine($"{LocalizationManager.Get("DiagRuntime")} : {Environment.Version}");
+            sb.AppendLine($"{LocalizationManager.Get("DiagArch")}    : {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}");
+            sb.AppendLine($"{LocalizationManager.Get("DiagMemory")}    : {GC.GetTotalMemory(false) / 1024 / 1024} MB");
             sb.AppendLine();
 
             // Append the two most recent per-startup log files (latest 1000 lines each,
@@ -202,7 +204,7 @@ public partial class SettingsWindow : Window
             foreach (var logFile in recentLogs)
             {
                 var logName = System.IO.Path.GetFileNameWithoutExtension(logFile);
-                sb.AppendLine($"────────────── 日志：{logName} ──────────────");
+                sb.AppendLine($"────────────── {LocalizationManager.Format("DiagLogSection", logName)} ──────────────");
                 foreach (var line in await ReadLogTailAsync(logFile, 1000))
                     sb.AppendLine(line);
                 sb.AppendLine();
@@ -217,18 +219,18 @@ public partial class SettingsWindow : Window
                 Arguments       = $"/select,\"{reportPath}\"",
                 UseShellExecute = true
             });
-            btn.Content = "✓ 已保存";
+            btn.Content = LocalizationManager.Get("LogsSaved");
         }
         catch (Exception ex)
         {
-            btn.Content = "✕ 失败";
-            MessageBox.Show(ex.Message, "日志收集失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+            btn.Content = LocalizationManager.Get("LogsFailed");
+            MessageBox.Show(ex.Message, LocalizationManager.Get("LogsFailedTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
         {
             btn.IsEnabled = true;
             await Task.Delay(2000);
-            btn.Content = "📋 收集日志";
+            btn.Content = LocalizationManager.Get("SettingsCollectLogs");
         }
     }
 
