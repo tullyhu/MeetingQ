@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<Question> Questions { get; set; }
     public DbSet<ActionItem> ActionItems { get; set; }
     public DbSet<VoiceprintSpeaker> VoiceprintSpeakers { get; set; }
+    public DbSet<MeetingTheme> MeetingThemes { get; set; }
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
@@ -35,6 +36,15 @@ public class AppDbContext : DbContext
                   .WithOne(s => s.Session)
                   .HasForeignKey(s => s.SessionId)
                   .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Theme)
+                  .WithMany(t => t.Sessions)
+                  .HasForeignKey(e => e.ThemeId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<MeetingTheme>(entity =>
+        {
+            entity.HasKey(e => e.ThemeId);
         });
 
         modelBuilder.Entity<Topic>(entity =>

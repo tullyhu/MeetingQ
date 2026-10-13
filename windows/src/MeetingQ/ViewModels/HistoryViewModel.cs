@@ -81,6 +81,78 @@ public partial class SessionItem : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasActionItems))]
     private List<ActionItemDisplay> _actionItems = new();
 
+    // ── Structured minutes (template pipeline) ──
+
+    public string? TemplateId { get; set; }
+    public string? TemplateName => MinutesTemplateLibrary.DisplayName(TemplateId);
+    public int?    QualityScore { get; set; }
+    public int?    ThemeId      { get; set; }
+    public string? ThemeName    { get; set; }
+    public string? MinutesJson  { get; set; }
+
+    private StructuredMinutes? _minutes;
+    private bool _minutesParsed;
+    public StructuredMinutes? Minutes
+    {
+        get
+        {
+            if (!_minutesParsed)
+            {
+                _minutes = StructuredMinutes.Decode(MinutesJson);
+                _minutesParsed = true;
+            }
+            return _minutes;
+        }
+    }
+
+    public bool HasMinutesMeta   => TemplateName is not null || QualityScore is not null || ThemeName is not null;
+    public string MinutesMetaLabel
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (ThemeName is not null)
+                parts.Add((LocalizationManager.Instance.IsEnglish ? "Theme: " : "主题：") + ThemeName);
+            if (TemplateName is not null)
+                parts.Add((LocalizationManager.Instance.IsEnglish ? "Template: " : "模板：") + TemplateName);
+            if (QualityScore is { } q)
+                parts.Add((LocalizationManager.Instance.IsEnglish ? "Quality: " : "质量评分：") + q);
+            return string.Join("   ·   ", parts);
+        }
+    }
+
+    public bool HasHighlights    => Minutes?.Highlights.Count > 0;
+    public bool HasRisks         => Minutes?.Risks.Count > 0;
+    public bool HasOpenQuestions => Minutes?.OpenQuestions.Count > 0;
+    public bool HasNextSteps     => Minutes?.NextSteps.Count > 0;
+    public bool HasTopicDetails  => Minutes?.TopicDetails.Count > 0;
+
+    public List<string> Highlights    => Minutes?.Highlights    ?? new();
+    public List<string> Risks         => Minutes?.Risks         ?? new();
+    public List<string> OpenQuestions => Minutes?.OpenQuestions ?? new();
+    public List<string> NextSteps     => Minutes?.NextSteps     ?? new();
+    public List<StructuredMinutes.TopicDetail> TopicDetails => Minutes?.TopicDetails ?? new();
+
+    /// <summary>Raises change notifications for all minutes-derived properties.</summary>
+    public void NotifyMinutesChanged()
+    {
+        _minutesParsed = false;
+        OnPropertyChanged(nameof(Minutes));
+        OnPropertyChanged(nameof(TemplateName));
+        OnPropertyChanged(nameof(HasMinutesMeta));
+        OnPropertyChanged(nameof(MinutesMetaLabel));
+        OnPropertyChanged(nameof(HasHighlights));
+        OnPropertyChanged(nameof(HasRisks));
+        OnPropertyChanged(nameof(HasOpenQuestions));
+        OnPropertyChanged(nameof(HasNextSteps));
+        OnPropertyChanged(nameof(HasTopicDetails));
+        OnPropertyChanged(nameof(Highlights));
+        OnPropertyChanged(nameof(Risks));
+        OnPropertyChanged(nameof(OpenQuestions));
+        OnPropertyChanged(nameof(NextSteps));
+        OnPropertyChanged(nameof(TopicDetails));
+    }
+
     public string TranscriptCountLabel => LocalizationManager.Format("HistTranscriptCountFmt", TranscriptCount);
     public bool   HasTranscripts       => Transcripts.Count > 0;
     public bool   HasScreenshots       => ScreenshotPaths.Count > 0;
@@ -139,6 +211,83 @@ public partial class HistoryViewModel : ObservableObject
         _llm       = llm;
     }
 
+    // ── 跨会议主题过滤与行动项追踪 ────────────────────────────────────────
+
+    public sealed record ThemeFilterItem(int? ThemeId, string Name);
+
+    public sealed record TrackedActionDisplay(string Owner, string Task, string? Deadline, int MentionCount)
+    {
+        public string Label => LocalizationManager.Instance.IsEnglish
+            ? $"{Owner}: {Task}{(MentionCount > 1 ? $"  ×{MentionCount}" : "")}"
+            : $"{Owner}：{Task}{(MentionCount > 1 ? $"  ×{MentionCount}" : "")}";
+    }
+
+    public ObservableCollection<ThemeFilterItem> ThemeFilters { get; } = new();
+    public ObservableCollection<TrackedActionDisplay> ThemeTrackedActions { get; } = new();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ThemeFilterActive))]
+    private ThemeFilterItem? _selectedThemeFilter;
+
+    public bool ThemeFilterActive => SelectedThemeFilter?.ThemeId is not null;
+    public bool HasThemeTrackedActions => ThemeTrackedActions.Count > 0;
+
+    partial void OnSelectedThemeFilterChanged(ThemeFilterItem? value)
+    {
+        ApplyFilter();
+        _ = LoadThemeTrackedActionsAsync(value?.ThemeId);
+    }
+
+    private async Task LoadThemesAsync()
+    {
+        try
+        {
+            using var db = _dbFactory.CreateDbContext();
+            var themes = await db.MeetingThemes
+                .Where(t => !t.IsArchived)
+                .OrderByDescending(t => t.CreatedAt)
+                .AsNoTracking()
+                .ToListAsync();
+            var keep = SelectedThemeFilter;
+            ThemeFilters.Clear();
+            ThemeFilters.Add(new ThemeFilterItem(null, LocalizationManager.Get("HistThemeAll")));
+            foreach (var t in themes)
+                ThemeFilters.Add(new ThemeFilterItem(t.ThemeId, t.Name));
+            SelectedThemeFilter = keep is not null
+                ? ThemeFilters.FirstOrDefault(f => f.ThemeId == keep.ThemeId) ?? ThemeFilters[0]
+                : ThemeFilters[0];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Theme] Failed to load theme list");
+        }
+    }
+
+    private async Task LoadThemeTrackedActionsAsync(int? themeId)
+    {
+        ThemeTrackedActions.Clear();
+        OnPropertyChanged(nameof(HasThemeTrackedActions));
+        if (themeId is null) return;
+        try
+        {
+            using var db = _dbFactory.CreateDbContext();
+            var items = await db.ActionItems
+                .Where(a => a.Topic.Session.ThemeId == themeId.Value)
+                .OrderBy(a => a.Timestamp)
+                .AsNoTracking()
+                .ToListAsync();
+            foreach (var t in CrossMeetingActionTracker.Group(items))
+                ThemeTrackedActions.Add(new TrackedActionDisplay(
+                    t.Representative.AssignedTo, t.Representative.Task,
+                    t.Representative.Deadline, t.MentionCount));
+            OnPropertyChanged(nameof(HasThemeTrackedActions));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Theme] Failed to load tracked actions for theme {ThemeId}", themeId);
+        }
+    }
+
     // ── Initial load: session list with metadata only ──────────────────────
     // No transcript/decision includes — avoids Cartesian product explosion
     // and keeps the window open instantly regardless of history size.
@@ -167,6 +316,10 @@ public partial class HistoryViewModel : ObservableObject
                     s.StartTime,
                     s.EndTime,
                     s.Summary,
+                    s.TemplateId,
+                    s.QualityScore,
+                    s.ThemeId,
+                    ThemeName = s.Theme != null ? s.Theme.Name : null,
                     TopicTitles = s.Topics.OrderBy(t => t.OrderIndex).Select(t => t.Title).ToList(),
                     Screenshots = s.Screenshots
                         .OrderBy(sc => sc.Timestamp)
@@ -191,6 +344,10 @@ public partial class HistoryViewModel : ObservableObject
                     StartTime       = s.StartTime,
                     EndTime         = s.EndTime,
                     OverallSummary  = s.Summary,
+                    TemplateId      = s.TemplateId,
+                    QualityScore    = s.QualityScore,
+                    ThemeId         = s.ThemeId,
+                    ThemeName       = s.ThemeName,
                     TranscriptCount = transcriptCounts.GetValueOrDefault(s.SessionId, 0),
                     ScreenshotCount = s.Screenshots.Count,
                     TopicTitles     = s.TopicTitles,
@@ -208,6 +365,7 @@ public partial class HistoryViewModel : ObservableObject
             }
 
             ApplyFilter();
+            await LoadThemesAsync();
             StatusText = sessions.Count == 0
                 ? LocalizationManager.Get("HistEmpty")
                 : LocalizationManager.Format("HistTotalFmt", sessions.Count);
@@ -233,9 +391,11 @@ public partial class HistoryViewModel : ObservableObject
     {
         var selected = SelectedSession;
         Sessions.Clear();
-        var filtered = string.IsNullOrWhiteSpace(SearchText)
-            ? _allSessions
-            : _allSessions.Where(s =>
+        IEnumerable<SessionItem> filtered = _allSessions;
+        if (SelectedThemeFilter?.ThemeId is { } themeId)
+            filtered = filtered.Where(s => s.ThemeId == themeId);
+        if (!string.IsNullOrWhiteSpace(SearchText))
+            filtered = filtered.Where(s =>
                 s.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
                 s.TopicTitles.Any(t => t.Contains(SearchText, StringComparison.OrdinalIgnoreCase)));
         foreach (var s in filtered)
@@ -424,6 +584,11 @@ public partial class HistoryViewModel : ObservableObject
                 .Select(s => new
                 {
                     s.Summary,
+                    s.MinutesJson,
+                    s.TemplateId,
+                    s.QualityScore,
+                    s.ThemeId,
+                    ThemeName = s.Theme != null ? s.Theme.Name : null,
                     Screenshots = s.Screenshots
                         .OrderBy(sc => sc.Timestamp)
                         .Select(sc => new ScreenshotItem(sc.FilePath, sc.Timestamp)
@@ -452,6 +617,12 @@ public partial class HistoryViewModel : ObservableObject
             target.TranscriptCount = allTranscripts.Count;
             target.ScreenshotPaths = allScreenshots;
             target.OverallSummary  = sessionSummary;
+            target.MinutesJson     = detail?.MinutesJson;
+            target.TemplateId      = detail?.TemplateId;
+            target.QualityScore    = detail?.QualityScore;
+            target.ThemeId         = detail?.ThemeId;
+            target.ThemeName       = detail?.ThemeName;
+            target.NotifyMinutesChanged();
 
             // Mark as loaded so re-selection doesn't re-fetch (only after data is applied).
             // Since SessionItem is now ObservableObject, properties notify automatically.
@@ -679,20 +850,23 @@ public partial class HistoryViewModel : ObservableObject
 
                     if (meetingSession is not null && topics.Any(t => t.Transcripts.Count > 0))
                     {
-                        var prompt = FloatingWindowViewModel.BuildFinalSummaryPrompt(
-                            meetingSession, topics, screenshots);
-                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-                        var response = await _llm.AnalyzeAsync(prompt, cts.Token);
-                        var json = response.Trim();
-                        if (json.StartsWith("```"))
-                            json = System.Text.RegularExpressions.Regex.Replace(json, @"^```\w*\n?|\n?```$", "");
-                        using var doc = System.Text.Json.JsonDocument.Parse(json);
-                        if (doc.RootElement.TryGetProperty("summary", out var summaryEl))
+                        var ok = await MinutesPipeline.GenerateFinalMinutesAsync(
+                            db, meetingSession, topics, screenshots, _llm, _logger);
+                        if (!ok)
                         {
-                            meetingSession.Summary = summaryEl.GetString();
-                            await db.SaveChangesAsync();
-                            _logger.LogInformation("[RegenVision] Session summary regenerated for {Id}", session.SessionId);
+                            var prompt = FloatingWindowViewModel.BuildFinalSummaryPrompt(
+                                meetingSession, topics, screenshots);
+                            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+                            var response = await _llm.AnalyzeAsync(prompt, cts.Token);
+                            var json = response.Trim();
+                            if (json.StartsWith("```"))
+                                json = System.Text.RegularExpressions.Regex.Replace(json, @"^```\w*\n?|\n?```$", "");
+                            using var doc = System.Text.Json.JsonDocument.Parse(json);
+                            if (doc.RootElement.TryGetProperty("summary", out var summaryEl))
+                                meetingSession.Summary = summaryEl.GetString();
                         }
+                        await db.SaveChangesAsync();
+                        _logger.LogInformation("[RegenVision] Session summary regenerated for {Id}", session.SessionId);
                     }
                 }
                 catch (Exception ex)
@@ -956,7 +1130,9 @@ public partial class HistoryViewModel : ObservableObject
         sb.AppendLine($"**{L.DurationLabel}** {s.DurationLabel}  ");
         sb.AppendLine($"**{L.TranscriptsLabel}** {s.TranscriptCount}  ");
         if (s.ScreenshotPaths.Count > 0)
-            sb.AppendLine($"**{L.ScreenshotsLabel}** {s.ScreenshotPaths.Count}");
+            sb.AppendLine($"**{L.ScreenshotsLabel}** {s.ScreenshotPaths.Count}  ");
+        if (s.MinutesMetaLabel.Length > 0)
+            sb.AppendLine($"{s.MinutesMetaLabel}  ");
         sb.AppendLine();
 
         // ── Overall meeting summary ──
@@ -1014,6 +1190,45 @@ public partial class HistoryViewModel : ObservableObject
             foreach (var a in s.ActionItems)
                 sb.AppendLine($"| {EscapeMarkdown(a.AssignedTo)} | {EscapeMarkdown(a.Task)} | {EscapeMarkdown(a.Deadline ?? "—")} |");
             sb.AppendLine();
+        }
+
+        // ── Structured-minutes extras (template pipeline) ──
+        if (s.Minutes is { } mins)
+        {
+            if (mins.Highlights.Count > 0)
+            {
+                sb.AppendLine($"## {MinutesSection.Highlights.Title()}");
+                foreach (var h in mins.Highlights) sb.AppendLine($"- {EscapeMarkdown(h)}");
+                sb.AppendLine();
+            }
+            if (mins.TopicDetails.Count > 0)
+            {
+                sb.AppendLine($"## {MinutesSection.TopicDetails.Title()}");
+                foreach (var td in mins.TopicDetails)
+                {
+                    sb.AppendLine($"- **{EscapeMarkdown(td.Title)}**");
+                    foreach (var p in td.Points) sb.AppendLine($"  - {EscapeMarkdown(p)}");
+                }
+                sb.AppendLine();
+            }
+            if (mins.Risks.Count > 0)
+            {
+                sb.AppendLine($"## {MinutesSection.Risks.Title()}");
+                foreach (var r in mins.Risks) sb.AppendLine($"- {EscapeMarkdown(r)}");
+                sb.AppendLine();
+            }
+            if (mins.OpenQuestions.Count > 0)
+            {
+                sb.AppendLine($"## {MinutesSection.OpenQuestions.Title()}");
+                foreach (var q in mins.OpenQuestions) sb.AppendLine($"- {EscapeMarkdown(q)}");
+                sb.AppendLine();
+            }
+            if (mins.NextSteps.Count > 0)
+            {
+                sb.AppendLine($"## {MinutesSection.NextSteps.Title()}");
+                foreach (var n in mins.NextSteps) sb.AppendLine($"- {EscapeMarkdown(n)}");
+                sb.AppendLine();
+            }
         }
 
         // ── Full meeting record: transcripts + screenshots chronologically ──
@@ -1108,6 +1323,8 @@ public partial class HistoryViewModel : ObservableObject
         sb.AppendLine($"<span>{L.TranscriptsLabel}{s.TranscriptCount}</span>");
         if (s.ScreenshotPaths.Count > 0)
             sb.AppendLine($"<span>{L.ScreenshotsLabel}{s.ScreenshotPaths.Count}</span>");
+        if (s.MinutesMetaLabel.Length > 0)
+            sb.AppendLine($"<span>{EscapeHtml(s.MinutesMetaLabel)}</span>");
         sb.AppendLine("</p>");
 
         // ── Overall meeting summary ──
@@ -1159,6 +1376,46 @@ public partial class HistoryViewModel : ObservableObject
             foreach (var a in s.ActionItems)
                 sb.AppendLine($"<tr><td>{EscapeHtml(a.AssignedTo)}</td><td>{EscapeHtml(a.Task)}</td><td>{EscapeHtml(a.Deadline ?? "—")}</td></tr>");
             sb.AppendLine("</tbody></table>");
+        }
+
+        // Structured-minutes extras (template pipeline)
+        if (s.Minutes is { } minsHtml)
+        {
+            if (minsHtml.Highlights.Count > 0)
+            {
+                sb.AppendLine($"<h2>{MinutesSection.Highlights.Title()}</h2><ul>");
+                foreach (var h in minsHtml.Highlights) sb.AppendLine($"<li>{EscapeHtml(h)}</li>");
+                sb.AppendLine("</ul>");
+            }
+            if (minsHtml.TopicDetails.Count > 0)
+            {
+                sb.AppendLine($"<h2>{MinutesSection.TopicDetails.Title()}</h2><ul>");
+                foreach (var td in minsHtml.TopicDetails)
+                {
+                    sb.AppendLine($"<li><strong>{EscapeHtml(td.Title)}</strong><ul>");
+                    foreach (var p in td.Points) sb.AppendLine($"<li>{EscapeHtml(p)}</li>");
+                    sb.AppendLine("</ul></li>");
+                }
+                sb.AppendLine("</ul>");
+            }
+            if (minsHtml.Risks.Count > 0)
+            {
+                sb.AppendLine($"<h2>{MinutesSection.Risks.Title()}</h2><ul>");
+                foreach (var r in minsHtml.Risks) sb.AppendLine($"<li>{EscapeHtml(r)}</li>");
+                sb.AppendLine("</ul>");
+            }
+            if (minsHtml.OpenQuestions.Count > 0)
+            {
+                sb.AppendLine($"<h2>{MinutesSection.OpenQuestions.Title()}</h2><ul>");
+                foreach (var q in minsHtml.OpenQuestions) sb.AppendLine($"<li>{EscapeHtml(q)}</li>");
+                sb.AppendLine("</ul>");
+            }
+            if (minsHtml.NextSteps.Count > 0)
+            {
+                sb.AppendLine($"<h2>{MinutesSection.NextSteps.Title()}</h2><ul>");
+                foreach (var n in minsHtml.NextSteps) sb.AppendLine($"<li>{EscapeHtml(n)}</li>");
+                sb.AppendLine("</ul>");
+            }
         }
 
         // Full meeting record: transcripts + screenshots (at bottom)

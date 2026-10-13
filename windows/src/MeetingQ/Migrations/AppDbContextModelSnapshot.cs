@@ -89,12 +89,51 @@ namespace MeetingQ.Migrations
                     b.Property<string>("Summary")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TemplateId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MinutesJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("QualityScore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ThemeId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Title")
                         .HasColumnType("TEXT");
 
                     b.HasKey("SessionId");
 
+                    b.HasIndex("ThemeId");
+
                     b.ToTable("Sessions");
+                });
+
+            modelBuilder.Entity("MeetingQ.Models.MeetingTheme", b =>
+                {
+                    b.Property<int>("ThemeId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("KeywordsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ThemeId");
+
+                    b.ToTable("MeetingThemes");
                 });
 
             modelBuilder.Entity("MeetingQ.Models.Question", b =>
@@ -301,6 +340,16 @@ namespace MeetingQ.Migrations
                     b.Navigation("Session");
                 });
 
+            modelBuilder.Entity("MeetingQ.Models.MeetingSession", b =>
+                {
+                    b.HasOne("MeetingQ.Models.MeetingTheme", "Theme")
+                        .WithMany("Sessions")
+                        .HasForeignKey("ThemeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Theme");
+                });
+
             modelBuilder.Entity("MeetingQ.Models.Topic", b =>
                 {
                     b.HasOne("MeetingQ.Models.MeetingSession", "Session")
@@ -328,6 +377,11 @@ namespace MeetingQ.Migrations
                     b.Navigation("Screenshots");
 
                     b.Navigation("Topics");
+                });
+
+            modelBuilder.Entity("MeetingQ.Models.MeetingTheme", b =>
+                {
+                    b.Navigation("Sessions");
                 });
 
             modelBuilder.Entity("MeetingQ.Models.Topic", b =>

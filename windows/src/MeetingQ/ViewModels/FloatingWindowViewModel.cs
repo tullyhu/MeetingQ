@@ -2490,23 +2490,36 @@ public partial class FloatingWindowViewModel : ObservableObject
             // Generate final summary if there's meaningful content
             if (topics.Any(t => t.Transcripts.Count > 0))
             {
-                var prompt = BuildFinalSummaryPrompt(session, topics, screenshots);
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-                try
+                // Preferred path: template-driven structured minutes + quality score
+                var ok = await MinutesPipeline.GenerateFinalMinutesAsync(
+                    db, session, topics, screenshots, _llm, _logger);
+                if (ok)
+                    _logger.LogInformation("[Session] Final structured minutes generated");
+
+                if (!ok || string.IsNullOrWhiteSpace(session.Summary))
                 {
-                    var response = await _llm.AnalyzeAsync(prompt, cts.Token);
-                    var json = response.Trim();
-                    if (json.StartsWith("```")) json = Regex.Replace(json, @"^```\w*\n?|\n?```$", "");
-                    using var doc = System.Text.Json.JsonDocument.Parse(json);
-                    var root = doc.RootElement;
-                    if (root.TryGetProperty("summary", out var summaryEl))
-                        session.Summary = summaryEl.GetString();
-                    _logger.LogInformation("[Session] Final summary generated");
+                    // Legacy fallback: fixed-schema summary prompt
+                    var prompt = BuildFinalSummaryPrompt(session, topics, screenshots);
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+                    try
+                    {
+                        var response = await _llm.AnalyzeAsync(prompt, cts.Token);
+                        var json = response.Trim();
+                        if (json.StartsWith("```")) json = Regex.Replace(json, @"^```\w*\n?|\n?```$", "");
+                        using var doc = System.Text.Json.JsonDocument.Parse(json);
+                        var root = doc.RootElement;
+                        if (root.TryGetProperty("summary", out var summaryEl))
+                            session.Summary = summaryEl.GetString();
+                        _logger.LogInformation("[Session] Final summary generated (legacy)");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "[Session] Final summary generation failed");
+                    }
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "[Session] Final summary generation failed");
-                }
+
+                // Cross-meeting theme classification (best-effort)
+                await MinutesPipeline.ClassifyThemeAsync(db, session, topics, _llm, _logger);
             }
 
             // ── Persist stable voiceprint clusters into the library ──
@@ -2540,7 +2553,7 @@ public partial class FloatingWindowViewModel : ObservableObject
     }
 
     internal static string BuildFinalSummaryPrompt(MeetingSession session, List<Topic> topics,
-        List<Screenshot> screenshots)
+        List<Screenshot> screenshots, MinutesTemplate? template = null, MeetingFeatures? features = null)
     {
         var sb = new System.Text.StringBuilder();
         var isEn = LocalizationManager.Instance.IsEnglish;
@@ -2549,10 +2562,19 @@ public partial class FloatingWindowViewModel : ObservableObject
             ? (session.EndTime.Value - session.StartTime).ToString(@"hh\:mm")
             : (isEn ? "Unknown" : "未知");
 
-        sb.AppendLine(isEn
-            ? "You are a meeting-minutes assistant. Generate a structured meeting summary from the complete meeting data below. Write the summary in English."
-            : "你是会议纪要助手。请根据以下完整的会议数据生成一份结构化的会议总结。");
-        sb.AppendLine();
+        if (template is not null)
+        {
+            // Template-driven role (mirrors macOS MinutesPromptBuilder)
+            sb.AppendLine(template.Role);
+            sb.AppendLine();
+        }
+        else
+        {
+            sb.AppendLine(isEn
+                ? "You are a meeting-minutes assistant. Generate a structured meeting summary from the complete meeting data below. Write the summary in English."
+                : "你是会议纪要助手。请根据以下完整的会议数据生成一份结构化的会议总结。");
+            sb.AppendLine();
+        }
         sb.AppendLine(isEn
             ? $"Meeting title: {session.Title ?? "Untitled"}"
             : $"会议标题：{session.Title ?? "未命名"}");
@@ -2560,6 +2582,10 @@ public partial class FloatingWindowViewModel : ObservableObject
             ? $"Meeting time: {session.StartTime:yyyy-MM-dd HH:mm} to {session.EndTime?.ToString("yyyy-MM-dd HH:mm") ?? "in progress"}"
             : $"会议时间：{session.StartTime:yyyy-MM-dd HH:mm} 至 {session.EndTime?.ToString("yyyy-MM-dd HH:mm") ?? "进行中"}");
         sb.AppendLine(isEn ? $"Duration: {duration}" : $"会议时长：{duration}");
+        if (features is not null)
+            sb.AppendLine(isEn
+                ? $"Detected type: {TemplateRecommender.MeetingTypeName(features.PredictedType)}"
+                : $"识别类型：{TemplateRecommender.MeetingTypeName(features.PredictedType)}");
         sb.AppendLine();
 
         // Topic overview (screenshot analyses are embedded under the topic they belong to,
@@ -2651,6 +2677,19 @@ public partial class FloatingWindowViewModel : ObservableObject
             : "请注意：转录文本是口头讨论，屏幕内容分析是与会者当时看到的信息（PPT/图表/文档等）。" +
               "请将两者结合——屏幕上展示的数据、结论若被讨论到，应在总结中体现其具体内容。");
         sb.AppendLine();
+
+        if (template is not null)
+        {
+            if (!string.IsNullOrEmpty(template.ExtraGuidance))
+            {
+                sb.AppendLine(isEn ? "[Template Guidance]" : "【模板要求】");
+                sb.AppendLine(template.ExtraGuidance);
+                sb.AppendLine();
+            }
+            sb.Append(BuildTemplateOutputSchema(template, isEn));
+            return sb.ToString();
+        }
+
         if (isEn)
         {
             sb.AppendLine("Generate a complete meeting summary as JSON:");
@@ -2672,6 +2711,68 @@ public partial class FloatingWindowViewModel : ObservableObject
             sb.AppendLine("只返回JSON，不要Markdown标记。");
         }
 
+        return sb.ToString();
+    }
+
+    /// <summary>Template-driven JSON output schema — mirrors macOS MinutesPromptBuilder.outputSchema.</summary>
+    private static string BuildTemplateOutputSchema(MinutesTemplate template, bool en)
+    {
+        var fields = new List<string>
+        {
+            en
+                ? "\"summary\": \"3-5 sentence executive summary: goals, key discussion, outcomes\""
+                : "\"summary\": \"3-5句话的整体概述：会议目标、讨论要点、核心成果\""
+        };
+        foreach (var section in template.Sections)
+        {
+            switch (section)
+            {
+                case MinutesSection.CoreSummary: break;
+                case MinutesSection.Decisions:
+                    fields.Add(en
+                        ? "\"decisions\": [{\"text\": \"conclusion statement\", \"rationale\": \"why\", \"source_speaker\": \"who said it or null\"}]"
+                        : "\"decisions\": [{\"text\": \"结论性语句\", \"rationale\": \"决策依据\", \"source_speaker\": \"提出人，未知则null\"}]");
+                    break;
+                case MinutesSection.ActionItems:
+                    fields.Add(en
+                        ? "\"action_items\": [{\"task\": \"specific task\", \"owner\": \"owner\", \"deadline\": \"YYYY-MM-DD or null\", \"priority\": \"high/medium/low\", \"source_speaker\": \"who proposed or null\"}]"
+                        : "\"action_items\": [{\"task\": \"具体任务\", \"owner\": \"负责人\", \"deadline\": \"YYYY-MM-DD 或 null\", \"priority\": \"high/medium/low\", \"source_speaker\": \"提出人，未知则null\"}]");
+                    break;
+                case MinutesSection.Risks:
+                    fields.Add(en
+                        ? "\"risks\": [\"risk or unconfirmed item with impact\"]"
+                        : "\"risks\": [\"风险或待确认事项，含影响描述\"]");
+                    break;
+                case MinutesSection.OpenQuestions:
+                    fields.Add(en
+                        ? "\"open_questions\": [\"unresolved question\"]"
+                        : "\"open_questions\": [\"未解决的问题\"]");
+                    break;
+                case MinutesSection.TopicDetails:
+                    fields.Add(en
+                        ? "\"topic_details\": [{\"title\": \"topic name\", \"points\": [\"3-5 discussion points\"]}]"
+                        : "\"topic_details\": [{\"title\": \"议题名\", \"points\": [\"3-5条讨论要点\"]}]");
+                    break;
+                case MinutesSection.Highlights:
+                    fields.Add(en
+                        ? "\"key_highlights\": [\"highlight 1\", \"highlight 2\"]"
+                        : "\"key_highlights\": [\"要点1\", \"要点2\"]");
+                    break;
+                case MinutesSection.NextSteps:
+                    fields.Add(en
+                        ? "\"next_steps\": [\"suggested follow-up\"]"
+                        : "\"next_steps\": [\"后续行动建议\"]");
+                    break;
+            }
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(en
+            ? "[Output Requirements]\nReturn JSON only (no Markdown fences). Cross-check decisions/action items with both the transcript-derived lists and the screen content above; merge duplicates and prefer the most precise wording. Use empty arrays when a section has no content."
+            : "【输出要求】\n只返回JSON（不要Markdown代码块）。决策与行动项需与上方转写提取结果和屏幕内容交叉核对，合并重复项，采用最准确的表述。无内容的章节返回空数组。");
+        sb.AppendLine("{");
+        sb.AppendLine("  " + string.Join(",\n  ", fields));
+        sb.AppendLine("}");
         return sb.ToString();
     }
 

@@ -97,6 +97,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="48"/>
                 <RowDefinition Height="36"/>
+                <RowDefinition Height="36"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="36"/>
             </Grid.RowDefinitions>
@@ -118,8 +119,18 @@
                 </Grid>
             </Border>
 
-            <!-- Search -->
+            <!-- Theme filter -->
             <Border Grid.Row="1" Padding="8,4" BorderThickness="0,0,0,1" BorderBrush="#EEEEEE">
+                <ComboBox ItemsSource="{Binding ThemeFilters}"
+                          SelectedItem="{Binding SelectedThemeFilter}"
+                          DisplayMemberPath="Name"
+                          FontSize="11" Padding="6,2"
+                          Background="#FFFFFF" BorderBrush="#DDDDDD"
+                          ToolTip="{local:Loc HistThemeFilterHint}"/>
+            </Border>
+
+            <!-- Search -->
+            <Border Grid.Row="2" Padding="8,4" BorderThickness="0,0,0,1" BorderBrush="#EEEEEE">
                 <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                          Background="#FFFFFF" BorderBrush="#DDDDDD"
                          FontSize="11" Padding="6,3"
@@ -127,7 +138,7 @@
             </Border>
 
             <!-- List -->
-            <ListBox Grid.Row="2"
+            <ListBox Grid.Row="3"
                      ItemsSource="{Binding Sessions}"
                      SelectedItem="{Binding SelectedSession}"
                      Background="Transparent"
@@ -160,7 +171,7 @@
             </ListBox>
 
             <!-- Status / refresh -->
-            <Border Grid.Row="3" Padding="14,0" BorderThickness="0,1,0,0" BorderBrush="#EEEEEE">
+            <Border Grid.Row="4" Padding="14,0" BorderThickness="0,1,0,0" BorderBrush="#EEEEEE">
                 <TextBlock Text="{Binding StatusText}"
                            Foreground="#AAAAAA" FontSize="10"
                            VerticalAlignment="Center"/>
@@ -225,6 +236,12 @@
                         <Run Text="  ·  " Foreground="#DDDDDD"/>
                         <Run Text="{Binding TranscriptCountLabel}"/>
                     </TextBlock>
+
+                    <!-- Template / quality / theme meta -->
+                    <TextBlock Text="{Binding MinutesMetaLabel}"
+                               Foreground="#6366F1" FontSize="11" Margin="0,-10,0,18"
+                               TextWrapping="Wrap"
+                               Visibility="{Binding HasMinutesMeta, Converter={StaticResource BoolToVis}}"/>
 
                     <!-- Topics -->
                     <TextBlock Text="{local:Loc Topics}" Style="{StaticResource SectionHeader}"/>
@@ -293,6 +310,80 @@
                                         <TextBlock Text="{Binding Label}"
                                                    Foreground="#333333" FontSize="12"
                                                    TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- Structured minutes extras (template pipeline) -->
+                    <StackPanel Visibility="{Binding HasHighlights, Converter={StaticResource BoolToVis}}" Margin="0,0,0,20">
+                        <TextBlock Text="{local:Loc MinSecHighlights}" Style="{StaticResource SectionHeader}"/>
+                        <ItemsControl ItemsSource="{Binding Highlights}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2">
+                                        <TextBlock Text="★ " Foreground="#D97706" FontSize="12"/>
+                                        <TextBlock Text="{Binding}" Foreground="#333333" FontSize="12" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <StackPanel Visibility="{Binding HasRisks, Converter={StaticResource BoolToVis}}" Margin="0,0,0,20">
+                        <TextBlock Text="{local:Loc MinSecRisks}" Style="{StaticResource SectionHeader}"/>
+                        <ItemsControl ItemsSource="{Binding Risks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2">
+                                        <TextBlock Text="⚠ " Foreground="#DC2626" FontSize="12"/>
+                                        <TextBlock Text="{Binding}" Foreground="#333333" FontSize="12" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <StackPanel Visibility="{Binding HasOpenQuestions, Converter={StaticResource BoolToVis}}" Margin="0,0,0,20">
+                        <TextBlock Text="{local:Loc MinSecOpenQuestions}" Style="{StaticResource SectionHeader}"/>
+                        <ItemsControl ItemsSource="{Binding OpenQuestions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2">
+                                        <TextBlock Text="? " Foreground="#2563EB" FontSize="12"/>
+                                        <TextBlock Text="{Binding}" Foreground="#333333" FontSize="12" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <StackPanel Visibility="{Binding HasNextSteps, Converter={StaticResource BoolToVis}}" Margin="0,0,0,20">
+                        <TextBlock Text="{local:Loc MinSecNextSteps}" Style="{StaticResource SectionHeader}"/>
+                        <ItemsControl ItemsSource="{Binding NextSteps}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2">
+                                        <TextBlock Text="▸ " Foreground="#16A34A" FontSize="12"/>
+                                        <TextBlock Text="{Binding}" Foreground="#333333" FontSize="12" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- Cross-meeting tracked actions for the selected theme filter -->
+                    <StackPanel Margin="0,0,0,20"
+                                DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                                Visibility="{Binding HasThemeTrackedActions, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{local:Loc HistTrackedActions}" Style="{StaticResource SectionHeader}"/>
+                        <ItemsControl ItemsSource="{Binding ThemeTrackedActions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:HistoryViewModel+TrackedActionDisplay}">
+                                    <StackPanel Orientation="Horizontal" Margin="0,2">
+                                        <TextBlock Text="↻ " Foreground="#6366F1" FontSize="12"/>
+                                        <TextBlock Text="{Binding Label}" Foreground="#333333" FontSize="12" TextWrapping="Wrap"/>
                                     </StackPanel>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
