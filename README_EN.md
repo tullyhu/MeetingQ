@@ -206,7 +206,7 @@ MeetingQ/
 
 ## Privacy Commitment
 
-- ❌ No accounts, no telemetry, no crash reporting, no servers of our own
+- ✅ No accounts, no telemetry, no crash reporting, no servers of our own
 - ✅ Speech recognition is fully on-device; raw audio never leaves the machine
 - ✅ Only the LLM endpoint you explicitly configure receives transcripts/screenshots (configure a local model for full offline operation)
 - ✅ Fully open source — audits welcome
