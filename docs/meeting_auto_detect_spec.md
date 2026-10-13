@@ -3,7 +3,7 @@
 <!-- doc-covers: Sources/MeetingQ/Services/MeetingWatcherService.swift, Sources/MeetingQ/Services/AudioProcessInspector.swift, Sources/MeetingQ/Services/WindowListHelper.swift (windowExists), Sources/MeetingQ/Services/ActiveSpeakerAxService.swift (hasCallControls) -->
 <!-- doc-verified: initial -->
 
-借鉴 screenpipe meeting_watcher 的思路并针对"纯听会"场景改造：不依赖日历、不做内容分析，
+面向"纯听会"场景设计：不依赖日历、不做内容分析，
 只回答一个问题——**该不该替你按下开始/停止**。
 
 ## 证据模型

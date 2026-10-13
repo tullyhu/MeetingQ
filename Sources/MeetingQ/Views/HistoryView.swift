@@ -416,8 +416,8 @@ private struct SessionDetailView: View {
     }
 }
 
-/// Bottom ask-line for a finished meeting (rest / peek / thread states).
-/// Borrowed from screenpipe's meeting chat rail spec: a persistent 44px
+/// Bottom ask-line for a finished meeting (rest / peek / thread states):
+/// a persistent 44px
 /// composer that peeks on focus (not persisted) and only grows into a thread
 /// after the first turn. Thread height is persisted; peek height is not.
 /// Disabled with a reason when there is no transcript or no active LLM.

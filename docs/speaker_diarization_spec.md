@@ -5,9 +5,7 @@
 
 对方轨（系统音频）通过设备端 CAM++ 声纹模型（FluidAudio，192 维，fp16/ANE）细分为多个说话人簇。全部离线运行，模型首次启用时从 HuggingFace 下载（约 15MB），不进入安装包。
 
-## 设计来源
-
-核心策略借鉴 screenpipe 的 speaker 管线（`crates/screenpipe-audio/src/speaker/`）：
+## 设计原则
 
 - **时长门控**：「够格被认出」与「够格当老师」是两个门槛，防止边缘音频污染质心
 - **质心 + 样本**：每簇维护运行质心 + 最多 10 个样本 embedding，余弦相似度匹配

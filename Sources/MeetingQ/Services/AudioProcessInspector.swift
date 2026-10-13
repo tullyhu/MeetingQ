@@ -22,8 +22,7 @@ import Foundation
 /// a meeting app holds its audio OUTPUT for the whole call, which is exactly
 /// what matters for passive listeners (mic/camera may never be enabled).
 ///
-/// Approach borrowed from screenpipe's meeting_watcher audio_process sensor,
-/// adapted: output occupancy is the primary evidence; input occupancy is only
+/// Output occupancy is the primary evidence; input occupancy is only
 /// a start accelerator, never end evidence.
 public enum AudioProcessInspector {
     public struct ProcessAudioState: Sendable, Equatable {

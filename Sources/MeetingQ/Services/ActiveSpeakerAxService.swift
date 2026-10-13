@@ -22,7 +22,7 @@ import Foundation
 /// Detects the "currently speaking" participant name by walking the meeting
 /// window's accessibility tree — far cheaper and more accurate than OCR.
 ///
-/// Design borrowed from screenpipe's event-driven capture spec:
+/// Design principles:
 /// - Accessibility first, OCR as fallback (caller decides the fallback).
 /// - Hard time/node budget so a huge Electron AX tree can't stall capture;
 ///   whatever text was collected within the budget is what we match against.
