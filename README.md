@@ -106,8 +106,6 @@ MeetingQ 就是为这一刻而生的：
 
 从 [Releases](../../releases) 下载 `MeetingQ-x.x.x.dmg`，拖入 Applications 即可。
 
-> 未公证的应用首次打开如遇拦截：右键 App →「打开」→ 在弹窗中确认。
-
 ### 方式二：源码构建
 
 ```bash

@@ -105,8 +105,6 @@ On a hit: popup alert (can be pinned) → instant screenshot → shows the origi
 
 Download `MeetingQ-x.x.x.dmg` from [Releases](../../releases) and drag it into Applications.
 
-> If an unnotarized app is blocked on first launch: right-click the app → **Open** → confirm in the dialog.
-
 ### Option 2: Build from Source
 
 ```bash
