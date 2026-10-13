@@ -188,6 +188,33 @@ internal static partial class StringsEn
         ["SettingsMicOff"] = "Currently off",
         ["SettingsMicOn"] = "Currently on",
         ["SettingsMicDevice"] = "Microphone device",
+
+        // ── Voiceprint library / meeting auto-detection ──
+        ["SettingsVoiceprintHeader"] = "Voiceprint Library",
+        ["SettingsVoiceprintDesc"] = "A voiceprint is a mathematical feature vector that cannot be turned back into audio; it stays on this machine. Once renamed, that person's speech shows their real name in future meetings.",
+        ["VoiceprintEmpty"] = "No voiceprints yet. After a multi-person meeting, recognized voices appear here.",
+        ["VoiceprintUnnamed"] = "Unnamed",
+        ["VoiceprintMeta"] = "{0} samples · last heard {1}",
+        ["VoiceprintRename"] = "Rename",
+        ["VoiceprintMergeSelected"] = "Merge Selected",
+        ["VoiceprintClearAll"] = "Clear All Voiceprints",
+        ["VoiceprintClearConfirm"] = "Clear all voiceprints? This cannot be undone.",
+        ["SettingsAutoDetectHeader"] = "Meeting Auto-Detection",
+        ["SettingsAutoDetectDesc"] = "Detects meeting starts via candidate windows and audio-output usage. \"Prompt Only\" asks first, \"Auto Start\" begins listening immediately. Only actual window destruction ends capture automatically — a suspected end always asks.",
+        ["AutoDetectOff"] = "Off",
+        ["AutoDetectPrompt"] = "Prompt Only",
+        ["AutoDetectAuto"] = "Auto Start",
+
+        // ── Meeting watcher prompts ──
+        ["WatcherStartTitle"] = "Meeting Detected",
+        ["WatcherStartBody"] = "{0} in progress: {1}. Click this notification to start listening.",
+        ["WatcherEndTitle"] = "Meeting May Have Ended",
+        ["WatcherEndBody"] = "Remote audio stopped 1 minute ago. Click this notification to stop and generate minutes.",
+
+        // ── Chat rail ──
+        ["ChatNoTranscript"] = "Nothing recorded yet",
+        ["ChatNoLlm"] = "Configure an LLM in Settings first",
+        ["ChatSuggestionCommitments"] = "What did I commit to in this meeting?",
         ["SettingsTabStats"] = "Usage Stats",
         ["SettingsStatsHeader"] = "Local Usage Statistics",
         ["SettingsStatsHint"] = "The following data comes from the local SQLite database and is never uploaded to any server.",

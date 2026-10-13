@@ -17,7 +17,6 @@ namespace MeetingQ.Services;
 public sealed class SherpaOnnxAsrService : IAsrService, ISpeakerRefinement
 {
     private const int SampleRate = 16000;
-    private const float MinSpeechForEmbeddingSec = 0.8f;
     private const int MaxEmbeddingSamples = SampleRate * 12;
     private const int MaxUtteranceBufferSamples = SampleRate * 30;
 
@@ -30,7 +29,13 @@ public sealed class SherpaOnnxAsrService : IAsrService, ISpeakerRefinement
 
     private OnlineRecognizer? _recognizer;
     private SpeakerEmbeddingExtractor? _extractor;
-    private readonly OnlineSpeakerCluster _speakerCluster = new(threshold: 0.60f);
+    private readonly SpeakerClusterer _speakerCluster = new();
+
+    // Voiceprint library (live hit): named entries cached at connect time.
+    private readonly VoiceprintLibraryService? _voiceprints;
+    private List<(long Id, string Name, float[] Centroid)> _namedLibrary = new();
+    private readonly HashSet<int> _libraryResolvedClusters = new();
+    private const float LibraryLiveHitThreshold = 0.75f;
 
     private CancellationTokenSource? _loopCts;
     private Task? _loopTask;
@@ -40,6 +45,11 @@ public sealed class SherpaOnnxAsrService : IAsrService, ISpeakerRefinement
 
     private int _utteranceId;
     private string? _currentSpeakerLabel;
+
+    public SherpaOnnxAsrService(VoiceprintLibraryService? voiceprints = null)
+    {
+        _voiceprints = voiceprints;
+    }
 
     // Meeting recording (PCM16 WAV) for the post-meeting offline diarization pass.
     private FileStream? _recStream;
@@ -75,6 +85,8 @@ public sealed class SherpaOnnxAsrService : IAsrService, ISpeakerRefinement
             }, cancellationToken);
 
             _speakerCluster.Reset();
+            _libraryResolvedClusters.Clear();
+            _namedLibrary = await LoadNamedLibraryAsync();
             _currentSpeakerLabel = null;
             _utteranceId = 0;
 
@@ -281,8 +293,13 @@ public sealed class SherpaOnnxAsrService : IAsrService, ISpeakerRefinement
 
     private string? IdentifySpeaker(List<float> samples)
     {
-        // Utterances that are too short yield unreliable embeddings — keep previous speaker.
-        if (_extractor is null || samples.Count < SampleRate * MinSpeechForEmbeddingSec)
+        if (_extractor is null)
+            return _currentSpeakerLabel;
+
+        // Duration gates (aligned with macOS, docs/speaker_diarization_spec.md):
+        // <1s skip entirely, 1-2s match-only (no learning), ≥2s learn.
+        var durationSec = (double)samples.Count / SampleRate;
+        if (SpeakerClusterer.Decide(durationSec) == SpeakerClusterer.IdentifyDecision.Skip)
             return _currentSpeakerLabel;
 
         try
@@ -295,16 +312,90 @@ public sealed class SherpaOnnxAsrService : IAsrService, ISpeakerRefinement
             stream.InputFinished();
 
             var embedding = _extractor.Compute(stream);
-            var speakerIndex = _speakerCluster.Assign(embedding);
+            OnlineSpeakerCluster.NormalizeInPlace(embedding);
+
+            var clusterId = _speakerCluster.Process(embedding, durationSec);
+            if (clusterId is not int cid)
+                return _currentSpeakerLabel;
+
+            // Voiceprint-library live hit: once a cluster is stable, a known
+            // voice shows their real name during the meeting.
+            if (!_libraryResolvedClusters.Contains(cid) && _speakerCluster.IsLiveLabelable(cid))
+            {
+                var centroid = _speakerCluster.CentroidOf(cid);
+                if (centroid is not null && _namedLibrary.Count > 0)
+                {
+                    var hitId = SpeakerClusterer.BestLibraryMatch(
+                        centroid,
+                        _namedLibrary.Select(e => (e.Id, e.Centroid)).ToList(),
+                        LibraryLiveHitThreshold);
+                    if (hitId is long id)
+                    {
+                        _libraryResolvedClusters.Add(cid);
+                        var name = _namedLibrary.FirstOrDefault(e => e.Id == id).Name;
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            _currentSpeakerLabel = name;
+                            return name;
+                        }
+                    }
+                }
+            }
+
             _currentSpeakerLabel = LocalizationManager.Instance.IsEnglish
-                ? $"Speaker {speakerIndex + 1}"
-                : $"发言人{speakerIndex + 1}";
+                ? $"Speaker {cid}"
+                : $"发言人{cid}";
             return _currentSpeakerLabel;
         }
         catch (Exception ex)
         {
             AppLog.Warn<SherpaOnnxAsrService>($"[LocalASR] Speaker embedding failed: {ex.Message}");
             return _currentSpeakerLabel;
+        }
+    }
+
+    private async Task<List<(long Id, string Name, float[] Centroid)>> LoadNamedLibraryAsync()
+    {
+        if (_voiceprints is null) return new();
+        try
+        {
+            var named = await _voiceprints.FetchNamedCentroidsAsync();
+            var all = await _voiceprints.FetchAllAsync();
+            return named.Select(t => (t.Id, all.First(s => s.Id == t.Id).Name, t.Centroid)).ToList();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn<SherpaOnnxAsrService>($"[Voiceprint] Library load failed: {ex.Message}");
+            return new();
+        }
+    }
+
+    /// <summary>Stable clusters (≥2 learnable samples) for end-of-meeting persistence.</summary>
+    public IReadOnlyList<(int ClusterId, float[] Centroid, int LearnCount, DateTime LastHeardAt)> GetStableClusters() =>
+        _speakerCluster.StableClusters
+            .Select(c => (c.Id, c.Centroid.ToArray(), c.LearnCount, c.LastHeardAt))
+            .ToList();
+
+    IReadOnlyList<StableVoiceprintCluster> ISpeakerRefinement.GetStableVoiceprintClusters() =>
+        _speakerCluster.StableClusters
+            .Select(c => new StableVoiceprintCluster(c.Id, c.Centroid.ToArray(), c.LearnCount, c.LastHeardAt))
+            .ToList();
+
+    public async Task PersistVoiceprintsAsync(Func<int, string?> nameResolver, CancellationToken cancellationToken = default)
+    {
+        if (_voiceprints is null) return;
+        foreach (var c in _speakerCluster.StableClusters)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                await _voiceprints.PersistClusterAsync(
+                    c.Centroid.ToArray(), c.LearnCount, c.LastHeardAt, nameResolver(c.Id));
+            }
+            catch (Exception ex)
+            {
+                AppLog.Warn<SherpaOnnxAsrService>($"[Voiceprint] Persist cluster {c.Id} failed: {ex.Message}");
+            }
         }
     }
 

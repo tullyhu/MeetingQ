@@ -52,3 +52,7 @@ Full license texts:
 
 - Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0
 - MIT License: https://opensource.org/licenses/MIT
+
+Bundled license texts: see the Licenses/ folder next to this file
+(Apache-2.0.txt, MIT.txt). Per-component copyright notices are listed
+in the sections above as required by each license.

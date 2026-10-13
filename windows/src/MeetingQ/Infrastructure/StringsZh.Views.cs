@@ -188,6 +188,33 @@ internal static partial class StringsZh
         ["SettingsMicOff"] = "当前已关闭",
         ["SettingsMicOn"] = "当前已开启",
         ["SettingsMicDevice"] = "麦克风设备",
+
+        // ── 声纹库 / 会议自动检测 ──
+        ["SettingsVoiceprintHeader"] = "声纹库",
+        ["SettingsVoiceprintDesc"] = "声纹是无法还原为语音的数学特征向量，仅保存在本机。改名后，下次会议中该人的发言会直接显示真名。",
+        ["VoiceprintEmpty"] = "暂无声纹记录。完成一场多人会议后，识别到的声音会出现在这里。",
+        ["VoiceprintUnnamed"] = "未命名",
+        ["VoiceprintMeta"] = "{0} 个样本 · 最后出现 {1}",
+        ["VoiceprintRename"] = "改名",
+        ["VoiceprintMergeSelected"] = "合并选中",
+        ["VoiceprintClearAll"] = "清空全部声纹",
+        ["VoiceprintClearConfirm"] = "确定清空全部声纹？此操作不可恢复。",
+        ["SettingsAutoDetectHeader"] = "会议自动检测",
+        ["SettingsAutoDetectDesc"] = "通过候选窗口与音频输出占用识别会议开始。「仅提示」会先询问，「自动开始」直接开始监听；窗口真正销毁才会自动结束，疑似散会只会提示确认。",
+        ["AutoDetectOff"] = "关闭",
+        ["AutoDetectPrompt"] = "仅提示",
+        ["AutoDetectAuto"] = "自动开始",
+
+        // ── 会议检测提示 ──
+        ["WatcherStartTitle"] = "检测到会议",
+        ["WatcherStartBody"] = "{0} 正在进行：{1}。点击此通知开始监听。",
+        ["WatcherEndTitle"] = "会议可能已结束",
+        ["WatcherEndBody"] = "对方声音已停止 1 分钟。点击此通知结束监听并生成纪要。",
+
+        // ── 问答 rail ──
+        ["ChatNoTranscript"] = "暂无转录，无法提问",
+        ["ChatNoLlm"] = "请先在设置中配置大模型",
+        ["ChatSuggestionCommitments"] = "我在这场会议承诺了什么？",
         ["SettingsTabStats"] = "使用统计",
         ["SettingsStatsHeader"] = "本机使用统计",
         ["SettingsStatsHint"] = "以下数据来自本地 SQLite 数据库，不上传至任何服务器。",

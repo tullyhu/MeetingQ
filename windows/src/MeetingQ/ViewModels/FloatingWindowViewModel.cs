@@ -31,6 +31,7 @@ public partial class FloatingWindowViewModel : ObservableObject
     private readonly LocalOcrService?       _localOcr;
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
     private readonly QuickSummaryPopup      _quickSummaryPopup;
+    private readonly MeetingWatcherService  _meetingWatcher;
     private readonly ScreenshotAlbumWindow  _screenshotAlbumWindow;
     private readonly ScreenshotAlbumViewModel _screenshotAlbum;
     private readonly ILogger<FloatingWindowViewModel> _logger;
@@ -188,6 +189,7 @@ public partial class FloatingWindowViewModel : ObservableObject
         QuickSummaryPopup       quickSummaryPopup,
         ScreenshotAlbumWindow   screenshotAlbumWindow,
         ScreenshotAlbumViewModel screenshotAlbum,
+        MeetingWatcherService   meetingWatcher,
         ILogger<FloatingWindowViewModel> logger)
     {
         _audioCapture          = audioCapture;
@@ -206,6 +208,7 @@ public partial class FloatingWindowViewModel : ObservableObject
         };
         _screenshotAlbumWindow = screenshotAlbumWindow;
         _screenshotAlbum       = screenshotAlbum;
+        _meetingWatcher        = meetingWatcher;
         _logger                = logger;
 
         _asr.TranscriptReceived += OnTranscriptReceived;
@@ -462,6 +465,7 @@ public partial class FloatingWindowViewModel : ObservableObject
         _contextManager.SetMeetingTitle(sessionTitle);
 
         IsMonitoring   = true;
+        _meetingWatcher.NotifyMonitoringChanged(true);
         HasSessionData = true;
         StatusText     = LocalizationManager.Get("FloatListening");
         CurrentTopic   = "";
@@ -750,6 +754,7 @@ public partial class FloatingWindowViewModel : ObservableObject
         }
 
         IsMonitoring = false;
+        _meetingWatcher.NotifyMonitoringChanged(false);
         StatusText   = LocalizationManager.Get("FloatStopped");
         CurrentTopic = LocalizationManager.Get("FloatTopicEnded");
         LatestTranscript = string.Empty;
@@ -2502,6 +2507,29 @@ public partial class FloatingWindowViewModel : ObservableObject
                 {
                     _logger.LogWarning(ex, "[Session] Final summary generation failed");
                 }
+            }
+
+            // ── Persist stable voiceprint clusters into the library ──
+            // Spec R5: a single stable cluster means "no separation happened" —
+            // skip persistence so a solo voice doesn't pollute the library.
+            if (_asr is ISpeakerRefinement voiceprints)
+            {
+                try
+                {
+                    var stable = voiceprints.GetStableVoiceprintClusters();
+                    if (stable.Count >= 2)
+                    {
+                        await voiceprints.PersistVoiceprintsAsync(cid =>
+                        {
+                            foreach (var label in new[] { $"发言人{cid}", $"Speaker {cid}" })
+                                if (speakerMapping.TryGetValue(label, out var name) && !string.IsNullOrWhiteSpace(name))
+                                    return name;
+                            return null;
+                        });
+                        _logger.LogInformation("[Voiceprint] Persisted {Count} stable clusters", stable.Count);
+                    }
+                }
+                catch (Exception ex) { _logger.LogWarning(ex, "[Voiceprint] Persist failed"); }
             }
 
             session.EndTime = DateTime.Now;

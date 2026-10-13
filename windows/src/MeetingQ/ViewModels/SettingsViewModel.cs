@@ -303,14 +303,113 @@ public partial class SettingsViewModel : ObservableObject
         IAsrService asrService,
         INameDetectionService nameDetection,
         IDbContextFactory<AppDbContext> dbFactory,
+        VoiceprintLibraryService voiceprints,
         ILogger<SettingsViewModel> logger)
     {
         _llmService    = llmService;
         _asrService    = asrService;
         _nameDetection = nameDetection;
         _dbFactory     = dbFactory;
+        _voiceprints   = voiceprints;
         _logger        = logger;
         LoadFromSecureStorage();
+        _ = LoadVoiceprintsAsync();
+    }
+
+    // ── 声纹库 (W2) ──────────────────────────────────────────────────────
+
+    private readonly VoiceprintLibraryService _voiceprints;
+
+    public partial class VoiceprintItem : ObservableObject
+    {
+        public long Id { get; init; }
+        [ObservableProperty] private string _name = string.Empty;
+        [ObservableProperty] private bool _isSelected;
+        public string Meta { get; init; } = string.Empty;
+        public DateTime LastHeardAt { get; init; }
+        public string DisplayName => string.IsNullOrWhiteSpace(Name)
+            ? LocalizationManager.Get("VoiceprintUnnamed") : Name;
+    }
+
+    public ObservableCollection<VoiceprintItem> Voiceprints { get; } = new();
+
+    [RelayCommand]
+    private async Task LoadVoiceprintsAsync()
+    {
+        var all = await _voiceprints.FetchAllAsync();
+        Voiceprints.Clear();
+        var unnamed = 0;
+        foreach (var s in all)
+        {
+            var name = s.Name;
+            if (string.IsNullOrWhiteSpace(name)) name = $"{LocalizationManager.Get("VoiceprintUnnamed")} {++unnamed}";
+            Voiceprints.Add(new VoiceprintItem
+            {
+                Id = s.Id,
+                Name = name,
+                Meta = string.Format(LocalizationManager.Get("VoiceprintMeta"),
+                    s.SampleCount, s.LastHeardAt.ToString("MM-dd HH:mm")),
+                LastHeardAt = s.LastHeardAt,
+            });
+        }
+    }
+
+    [RelayCommand]
+    private async Task RenameVoiceprintAsync(VoiceprintItem? item)
+    {
+        if (item is null) return;
+        var dlg = new MeetingQ.Views.SpeakerRenameDialog(new[] { item.Name }, async (_, newName) =>
+        {
+            await _voiceprints.RenameAsync(item.Id, newName);
+            return true;
+        });
+        dlg.ShowDialog();
+        await LoadVoiceprintsAsync();
+    }
+
+    [RelayCommand]
+    private async Task DeleteVoiceprintAsync(VoiceprintItem? item)
+    {
+        if (item is null) return;
+        await _voiceprints.DeleteAsync(item.Id);
+        await LoadVoiceprintsAsync();
+    }
+
+    [RelayCommand]
+    private async Task MergeSelectedVoiceprintsAsync()
+    {
+        var selected = Voiceprints.Where(v => v.IsSelected).ToList();
+        if (selected.Count < 2) return;
+        // Merge everything into the most-recently-heard entry.
+        var winner = selected.OrderByDescending(v => v.LastHeardAt).First();
+        foreach (var loser in selected.Where(v => v.Id != winner.Id))
+            await _voiceprints.MergeAsync(winner.Id, loser.Id);
+        await LoadVoiceprintsAsync();
+    }
+
+    [RelayCommand]
+    private async Task ClearAllVoiceprintsAsync()
+    {
+        var confirm = System.Windows.MessageBox.Show(
+            LocalizationManager.Get("VoiceprintClearConfirm"),
+            LocalizationManager.Get("VoiceprintClearAll"),
+            System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Warning);
+        if (confirm != System.Windows.MessageBoxResult.Yes) return;
+        await _voiceprints.ClearAllAsync();
+        await LoadVoiceprintsAsync();
+    }
+
+    // ── 会议自动检测 (W5) ────────────────────────────────────────────────
+
+    public string MeetingAutoDetectMode
+    {
+        get => SecureStorage.Load(SecureStorageKeys.MeetingAutoDetectMode) ?? "prompt";
+        set
+        {
+            SecureStorage.Save(SecureStorageKeys.MeetingAutoDetectMode, value);
+            OnPropertyChanged();
+        }
     }
 
     private bool _loadingSettings;
