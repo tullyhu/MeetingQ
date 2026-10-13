@@ -199,4 +199,42 @@ public class MinutesAndThemesTests
         Assert.True(f.WhiteboardDetected);
         Assert.Equal("brainstorming", f.PredictedType);
     }
+
+    [Fact]
+    public void Extractor_CountsSlideLevelSignals()
+    {
+        var session = new MeetingSession { StartTime = DateTime.Now, EndTime = DateTime.Now.AddMinutes(60) };
+        var topic = new Topic { Title = "评审", StartTime = DateTime.Now };
+        topic.Transcripts.Add(new Transcript { Text = "预算 预算 预算 客户 客户 客户 决定 决定 决定 决定", Timestamp = DateTime.Now });
+        var shots = new List<Screenshot>
+        {
+            new() { FilePath = "a", ContentType = "slide", Timestamp = DateTime.Now,
+                    SlideDecisions = "[\"批准Q4预算\",\"通过上线方案\",\"确认排期\"]",
+                    SlideActionItems = "[\"张三-周五前提交\"]",
+                    KeyDates = "[\"2026-09-10 上线\"]" },
+            new() { FilePath = "b", ContentType = "chart", Timestamp = DateTime.Now,
+                    SlideDecisions = "[\"保持现有定价\"]" },
+        };
+        var f = MeetingFeatureExtractor.Extract(session, new List<Topic> { topic }, shots);
+        Assert.Equal(4, f.SlideDecisionCount);
+        Assert.Equal(1, f.SlideActionItemCount);
+        Assert.Equal(1, f.SlideKeyDateCount);
+        Assert.Equal(1, f.ChartCount);
+        Assert.Equal("executive_meeting", f.PredictedType);
+    }
+
+    [Fact]
+    public void Recommender_SlideDecisionsBoostHighDecisionTemplates()
+    {
+        // Same transcript, but slide evidence of many decisions should push the
+        // executive template ahead of the plain general one.
+        var withSlides = new MeetingFeatures
+        {
+            PredictedType = "executive_meeting", TypeConfidence = 0.8,
+            DurationMinutes = 60, SlideDecisionCount = 4, ChartCount = 3, SlideCount = 6
+        };
+        var (best, _) = TemplateRecommender.Recommend(withSlides);
+        Assert.Equal("executive_business", best.TemplateId);
+        Assert.True(best.Confidence > 0.5);
+    }
 }

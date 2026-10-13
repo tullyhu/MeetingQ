@@ -1,6 +1,6 @@
 # Windows 版与 macOS 版对齐说明（2026-10 更新）
 
-2026-10-14 追加（v1.8.0）：纪要模板库 / 模板推荐 / 质量评分 / 结构化纪要解析（`Services/MinutesTemplates.cs`、`TemplateRecommender.cs`、`MinutesQualityAssessor.cs`、`StructuredMinutes.cs`、`MeetingFeatureExtractor.cs`）与跨会议主题聚合（`Services/ThemeClassifier.cs` + `Models/MeetingTheme` + 迁移 `20261014000001_AddMinutesTemplatesAndThemes`）均按 macOS MeetingQCore 同文件逐行移植，阈值与权重完全一致。Windows 截图无 slide 级决策/日期抽取，`MeetingFeatures.Slide*Count` 恒为 0，推荐器按转写信号降级运行。散会管道统一走 `Services/MinutesPipeline.cs`（模板路径失败时回退旧版固定 schema 摘要）。
+2026-10-14 追加（v1.8.0）：纪要模板库 / 模板推荐 / 质量评分 / 结构化纪要解析（`Services/MinutesTemplates.cs`、`TemplateRecommender.cs`、`MinutesQualityAssessor.cs`、`StructuredMinutes.cs`、`MeetingFeatureExtractor.cs`）与跨会议主题聚合（`Services/ThemeClassifier.cs` + `Models/MeetingTheme` + 迁移 `20261014000001_AddMinutesTemplatesAndThemes`）均按 macOS MeetingQCore 同文件逐行移植，阈值与权重完全一致。Vision 分析提示词与 slide 级信号（key_dates / slide_decisions / slide_action_items / chart_insight，迁移 `20261014000002_AddScreenshotSlideSignals`）已与 macOS vision.txt 3.1.4 对齐，模板推荐器的画面证据维度两端一致。散会管道统一走 `Services/MinutesPipeline.cs`（模板路径失败时回退旧版固定 schema 摘要）。
 
 本次把 macOS 版 W 系列的以下能力移植到 Windows 版：
 

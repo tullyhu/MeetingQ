@@ -815,6 +815,11 @@ public partial class HistoryViewModel : ObservableObject
                         sc.AISummary = result.AiSummary;
                         sc.MeetingRelevance = result.MeetingRelevance;
                         sc.ContentType = result.ContentType;
+                        sc.KeyDates = System.Text.Json.JsonSerializer.Serialize(result.KeyDates);
+                        sc.SlideDecisions = System.Text.Json.JsonSerializer.Serialize(result.SlideDecisions);
+                        sc.SlideActionItems = System.Text.Json.JsonSerializer.Serialize(result.SlideActionItems);
+                        sc.ChartType = result.ChartType;
+                        sc.ChartInsight = result.ChartInsight;
                         sc.AnalysisStatus = "ready";
                         analyzed++;
                     }

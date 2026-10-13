@@ -32,6 +32,21 @@ public class Screenshot
     /// <summary>JSON array of key numbers/figures extracted from the screenshot.</summary>
     public string? KeyNumbers { get; set; }
 
+    /// <summary>JSON array of key dates with context (slide/document signals).</summary>
+    public string? KeyDates { get; set; }
+
+    /// <summary>JSON array of decisions written on slides/documents.</summary>
+    public string? SlideDecisions { get; set; }
+
+    /// <summary>JSON array of action items written on slides.</summary>
+    public string? SlideActionItems { get; set; }
+
+    /// <summary>Chart type when content is a chart (bar/line/pie/table).</summary>
+    public string? ChartType { get; set; }
+
+    /// <summary>One-sentence chart insight when content is a chart.</summary>
+    public string? ChartInsight { get; set; }
+
     /// <summary>Relevance to the current meeting: high/medium/low.</summary>
     public string? MeetingRelevance { get; set; }
 

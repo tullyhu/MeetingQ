@@ -191,6 +191,12 @@ namespace MeetingQ.Migrations
                     b.Property<string>("AnalysisStatus")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ChartInsight")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ChartType")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ContentType")
                         .HasColumnType("TEXT");
 
@@ -204,6 +210,9 @@ namespace MeetingQ.Migrations
                     b.Property<string>("KeyEntities")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("KeyDates")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("KeyNumbers")
                         .HasColumnType("TEXT");
 
@@ -215,6 +224,12 @@ namespace MeetingQ.Migrations
 
                     b.Property<int?>("RelatedTopicId")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("SlideActionItems")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SlideDecisions")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("SensitivityLevel")
                         .HasColumnType("TEXT");

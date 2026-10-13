@@ -124,8 +124,8 @@ public class VisionService : IVisionService
             var topicText = currentTopic ?? LocalizationManager.Get("VisionTopicNotDetected");
             var transcriptsText = transcripts;
             var userMessage = isEnglish
-                ? "[Meeting context]\nCurrent topic: " + topicText + "\n\n[Transcript around the screenshot time]\n" + transcriptsText + "\n\n[Task]\nAnalyze the screenshot, focusing on:\n1. What is shown on screen (document/slide/data chart/whiteboard/code/chat window/other)\n2. Key data, conclusions, or information\n3. Relevance to the current meeting discussion\n4. Readable text in the image (OCR)\n5. The name of the person currently speaking in the video-conference UI (the current speaker's name is usually shown at the top/bottom/corner of the screen, e.g. \"John is speaking\", \"Jane (speaking)\")\n\n[Important] Output ONLY the following JSON format; field names must be strictly English lowercase + underscore:\n{\n  \"ai_summary\": \"2-4 sentences describing the image content and its relation to the meeting\",\n  \"content_type\": \"slide/chart/document/whiteboard/code/chat/browser/other\",\n  \"key_entities\": [\"keyword1\", \"keyword2\"],\n  \"key_numbers\": [\"12%\", \"500K\"],\n  \"ocr_text\": \"readable text in the image (key parts)\",\n  \"meeting_relevance\": \"high/medium/low\",\n  \"sensitivity_level\": \"low/medium/high\",\n  \"active_speaker_name\": \"name of the current speaker (if visible), otherwise null\"\n}\nOutput JSON only, no explanations, no Chinese field names."
-                : "【会议背景】\n当前议题: " + topicText + "\n\n【截图时间点前后的转写】\n" + transcriptsText + "\n\n【任务】\n分析截图内容,重点关注:\n1. 屏幕上展示的是什么(文档/幻灯片/数据图表/白板/代码/聊天窗口/其他)\n2. 关键数据、结论或信息\n3. 与当前会议讨论的关联性\n4. 图中可读文字(OCR)\n5. 视频会议UI中正在发言的人的名字(通常在屏幕顶部/底部/角落显示当前讲话人名称，如\"张三 正在发言\"、\"李四 (发言中)\"等)\n\n【重要】仅输出以下 JSON 格式,字段名严格使用英文小写+下划线:\n{\n  \"ai_summary\": \"2~4句描述图中内容和会议关联\",\n  \"content_type\": \"slide/chart/document/whiteboard/code/chat/browser/other\",\n  \"key_entities\": [\"关键词1\", \"关键词2\"],\n  \"key_numbers\": [\"12%\", \"50万\"],\n  \"ocr_text\": \"图中可读文字(关键部分)\",\n  \"meeting_relevance\": \"high/medium/low\",\n  \"sensitivity_level\": \"low/medium/high\",\n  \"active_speaker_name\": \"当前发言人的名字(如能看到)，否则填null\"\n}\n只输出 JSON,不要解释,不要使用中文字段名。";
+                ? "[Meeting context]\nCurrent topic: " + topicText + "\n\n[Transcript around the screenshot time]\n" + transcriptsText + "\n\n[Task]\nAnalyze the screenshot, focusing on:\n1. What is shown on screen (document/slide/data chart/whiteboard/code/chat window/other)\n2. Key data, conclusions, or information\n3. Relevance to the current meeting discussion\n4. Readable text in the image (OCR)\n5. The name of the person currently speaking in the video-conference UI (the current speaker's name is usually shown at the top/bottom/corner of the screen, e.g. \"John is speaking\", \"Jane (speaking)\")\n6. If it is a slide/document: extract key dates (YYYY-MM-DD with context), decisions written on it, action items (with owner/deadline if shown)\n7. If it is a chart: identify the chart type and the single most important insight (trend or comparison)\n\n[Important] Output ONLY the following JSON format; field names must be strictly English lowercase + underscore:\n{\n  \"ai_summary\": \"2-4 sentences describing the image content and its relation to the meeting\",\n  \"content_type\": \"slide/chart/document/whiteboard/code/chat/browser/other\",\n  \"key_entities\": [\"keyword1\", \"keyword2\"],\n  \"key_numbers\": [\"12%\", \"500K\"],\n  \"key_dates\": [\"2026-09-10 launch\", \"2026-09-05 UAT done\"],\n  \"slide_decisions\": [\"decision text written on the slide\"],\n  \"slide_action_items\": [\"task — owner — deadline\"],\n  \"chart_type\": \"bar/line/pie/table or null\",\n  \"chart_insight\": \"one sentence on the key trend/comparison or null\",\n  \"ocr_text\": \"readable text in the image (key parts)\",\n  \"meeting_relevance\": \"high/medium/low\",\n  \"sensitivity_level\": \"low/medium/high\",\n  \"active_speaker_name\": \"name of the current speaker (if visible), otherwise null\"\n}\nUse empty arrays when nothing applies. Output JSON only, no explanations, no Chinese field names."
+                : "【会议背景】\n当前议题: " + topicText + "\n\n【截图时间点前后的转写】\n" + transcriptsText + "\n\n【任务】\n分析截图内容,重点关注:\n1. 屏幕上展示的是什么(文档/幻灯片/数据图表/白板/代码/聊天窗口/其他)\n2. 关键数据、结论或信息\n3. 与当前会议讨论的关联性\n4. 图中可读文字(OCR)\n5. 视频会议UI中正在发言的人的名字(通常在屏幕顶部/底部/角落显示当前讲话人名称，如\"张三 正在发言\"、\"李四 (发言中)\"等)\n6. 如果是幻灯片/文档：提取关键日期（YYYY-MM-DD 带上下文）、页面上写的决策、行动项（含负责人/截止时间）\n7. 如果是图表：识别图表类型并给出最重要的一条洞察（趋势或对比）\n\n【重要】仅输出以下 JSON 格式,字段名严格使用英文小写+下划线:\n{\n  \"ai_summary\": \"2~4句描述图中内容和会议关联\",\n  \"content_type\": \"slide/chart/document/whiteboard/code/chat/browser/other\",\n  \"key_entities\": [\"关键词1\", \"关键词2\"],\n  \"key_numbers\": [\"12%\", \"50万\"],\n  \"key_dates\": [\"2026-09-10 上线\", \"2026-09-05 完成验收\"],\n  \"slide_decisions\": [\"页面上写的决策内容\"],\n  \"slide_action_items\": [\"任务 — 负责人 — 截止时间\"],\n  \"chart_type\": \"bar/line/pie/table 或 null\",\n  \"chart_insight\": \"一句话说明关键趋势/对比，否则 null\",\n  \"ocr_text\": \"图中可读文字(关键部分)\",\n  \"meeting_relevance\": \"high/medium/low\",\n  \"sensitivity_level\": \"low/medium/high\",\n  \"active_speaker_name\": \"当前发言人的名字(如能看到)，否则填null\"\n}\n不适用的字段返回空数组。只输出 JSON,不要解释,不要使用中文字段名。";
 
             var systemPrompt = isEnglish
                 ? "You are a meeting visual-content analysis assistant. Analyze this meeting screenshot and produce a structured description."
@@ -242,7 +242,25 @@ public class VisionService : IVisionService
             result.KeyNumbers = kn.EnumerateArray().Select(x => x.GetString() ?? string.Empty)
                 .Where(x => x.Length > 0).ToList();
 
+        // Slide-level structured signals (macOS parity)
+        result.KeyDates         = GetStringList(root, "key_dates", "keyDates");
+        result.SlideDecisions   = GetStringList(root, "slide_decisions", "slideDecisions");
+        result.SlideActionItems = GetStringList(root, "slide_action_items", "slideActionItems");
+        result.ChartType        = GetStringProperty(root, "chart_type", "chartType");
+        result.ChartInsight     = GetStringProperty(root, "chart_insight", "chartInsight");
+
         return result;
+    }
+
+    private static List<string> GetStringList(JsonElement root, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (root.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.Array)
+                return el.EnumerateArray().Select(x => x.GetString() ?? string.Empty)
+                    .Where(x => x.Length > 0).ToList();
+        }
+        return new List<string>();
     }
 
     /// <summary>Returns the first non-empty string property from the given field names.</summary>

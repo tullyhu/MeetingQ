@@ -518,6 +518,11 @@ public partial class FloatingWindowViewModel : ObservableObject
                                 screenshot.OcrText = result.OcrText;
                                 screenshot.KeyEntities = System.Text.Json.JsonSerializer.Serialize(result.KeyEntities);
                                 screenshot.KeyNumbers = System.Text.Json.JsonSerializer.Serialize(result.KeyNumbers);
+                                screenshot.KeyDates = System.Text.Json.JsonSerializer.Serialize(result.KeyDates);
+                                screenshot.SlideDecisions = System.Text.Json.JsonSerializer.Serialize(result.SlideDecisions);
+                                screenshot.SlideActionItems = System.Text.Json.JsonSerializer.Serialize(result.SlideActionItems);
+                                screenshot.ChartType = result.ChartType;
+                                screenshot.ChartInsight = result.ChartInsight;
                                 screenshot.SensitivityLevel = result.SensitivityLevel;
                                 screenshot.ActiveSpeakerName = result.ActiveSpeakerName;
                                 screenshot.AnalysisStatus = "ready";
@@ -2614,8 +2619,16 @@ public partial class FloatingWindowViewModel : ObservableObject
                 var line = isEn
                     ? $"  Screen[{s.Timestamp:HH:mm:ss}] {s.ContentType ?? "Content"}: {s.AISummary ?? s.OcrText ?? ""}"
                     : $"  屏幕[{s.Timestamp:HH:mm:ss}] {s.ContentType ?? "内容"}：{s.AISummary ?? s.OcrText ?? ""}";
-                if (!string.IsNullOrWhiteSpace(s.KeyNumbers))
+                if (!string.IsNullOrWhiteSpace(s.KeyNumbers) && s.KeyNumbers != "[]")
                     line += isEn ? $" (Key data: {s.KeyNumbers})" : $"（关键数据：{s.KeyNumbers}）";
+                if (!string.IsNullOrWhiteSpace(s.KeyDates) && s.KeyDates != "[]")
+                    line += isEn ? $" (Key dates: {s.KeyDates})" : $"（关键日期：{s.KeyDates}）";
+                if (!string.IsNullOrWhiteSpace(s.SlideDecisions) && s.SlideDecisions != "[]")
+                    line += isEn ? $" (Decisions on slide: {s.SlideDecisions})" : $"（页面决策：{s.SlideDecisions}）";
+                if (!string.IsNullOrWhiteSpace(s.SlideActionItems) && s.SlideActionItems != "[]")
+                    line += isEn ? $" (Action items on slide: {s.SlideActionItems})" : $"（页面行动项：{s.SlideActionItems}）";
+                if (!string.IsNullOrWhiteSpace(s.ChartInsight))
+                    line += isEn ? $" (Chart insight: {s.ChartInsight})" : $"（图表洞察：{s.ChartInsight}）";
                 if (topicShotChars + line.Length > 800) break;
                 sb.AppendLine(line);
                 topicShotChars += line.Length;

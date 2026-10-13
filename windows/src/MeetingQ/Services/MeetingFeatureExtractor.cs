@@ -5,9 +5,9 @@ namespace MeetingQ.Services;
 
 /// <summary>
 /// Meeting feature extraction — port of macOS MeetingFeatureExtractor.swift.
-/// Windows screenshots carry ContentType but not slide-level decision/action
-/// extraction, so slideDecisionCount / slideActionItemCount / slideKeyDateCount
-/// stay 0 and the recommender degrades gracefully to transcript-only signals.
+/// Windows screenshots carry the same slide-level signals as macOS
+/// (key_dates / slide_decisions / slide_action_items / chart_insight),
+/// persisted as JSON arrays on the Screenshot rows.
 /// </summary>
 public sealed class MeetingFeatures
 {
@@ -76,6 +76,9 @@ public static class MeetingFeatureExtractor
                 case "chart":      f.ChartCount++; break;
                 case "whiteboard": f.WhiteboardDetected = true; break;
             }
+            f.SlideDecisionCount    += CountJsonArrayItems(shot.SlideDecisions);
+            f.SlideActionItemCount  += CountJsonArrayItems(shot.SlideActionItems);
+            f.SlideKeyDateCount     += CountJsonArrayItems(shot.KeyDates);
         }
 
         var scores = new Dictionary<string, double>();
