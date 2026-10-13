@@ -111,6 +111,8 @@ public partial class App : Application
                 services.AddSingleton<IScreenCaptureService, ScreenCaptureService>();
                 services.AddSingleton<INameDetectionService, NameDetectionService>();
                 services.AddSingleton<IVisionService, VisionService>();
+                services.AddSingleton<VoiceprintLibraryService>();
+                services.AddSingleton<MeetingWatcherService>();
                 services.AddSingleton<LocalOcrService>();
 
                 // ViewModels
@@ -223,6 +225,15 @@ public partial class App : Application
             settings.Owner = floatingWindow;
             settings.Show();
         }
+
+        // ── 7. Meeting auto-detection (W5) ──────────────────────────────
+        var watcher = _host.Services.GetRequiredService<MeetingWatcherService>();
+        var vm = (FloatingWindowViewModel)floatingWindow.DataContext;
+        watcher.ShowPrompt = (title, body) =>
+            Application.Current.Dispatcher.Invoke(() => _trayIcon?.ShowBalloon(title, body));
+        watcher.StartRequested += () => vm.StartListeningCommand.Execute(null);
+        watcher.StopRequested  += () => vm.StopListeningCommand.Execute(null);
+        _trayIcon.BalloonClicked += () => watcher.ConfirmPendingPrompt();
 
         } // end try
         catch (Exception ex)

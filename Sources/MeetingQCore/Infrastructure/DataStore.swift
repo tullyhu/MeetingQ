@@ -126,6 +126,25 @@ public final class DataStore {
         exec("CREATE INDEX IF NOT EXISTS idx_topics_session ON topics(session_id)")
         exec("CREATE INDEX IF NOT EXISTS idx_transcripts_topic ON transcripts(topic_id)")
         exec("CREATE INDEX IF NOT EXISTS idx_screenshots_session ON screenshots(session_id)")
+        // Long-term voiceprint library (cross-meeting speaker recognition).
+        // Embeddings are 192-d CAM++ float vectors; cannot be inverted to audio.
+        exec("""
+        CREATE TABLE IF NOT EXISTS speakers(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            name_source TEXT,
+            centroid BLOB,
+            embedding_count INTEGER NOT NULL DEFAULT 0,
+            created_at REAL NOT NULL,
+            last_seen_at REAL NOT NULL)
+        """)
+        exec("""
+        CREATE TABLE IF NOT EXISTS speaker_embeddings(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            speaker_id INTEGER NOT NULL REFERENCES speakers(id) ON DELETE CASCADE,
+            embedding BLOB NOT NULL)
+        """)
+        exec("CREATE INDEX IF NOT EXISTS idx_speaker_embeddings_speaker ON speaker_embeddings(speaker_id)")
         exec("""
         CREATE TABLE IF NOT EXISTS themes(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -150,6 +169,7 @@ public final class DataStore {
         migrate("ALTER TABLE screenshots ADD COLUMN slide_action_items TEXT")
         migrate("ALTER TABLE screenshots ADD COLUMN chart_type TEXT")
         migrate("ALTER TABLE screenshots ADD COLUMN chart_insight TEXT")
+        migrate("ALTER TABLE screenshots ADD COLUMN speaker_name_source TEXT")
         exec("CREATE INDEX IF NOT EXISTS idx_sessions_theme ON sessions(theme_id)")
     }
 
@@ -173,6 +193,22 @@ public final class DataStore {
         } else {
             sqlite3_bind_null(stmt, index)
         }
+    }
+
+    private func bind(_ stmt: OpaquePointer?, _ index: Int32, _ value: Data?) {
+        if let value {
+            value.withUnsafeBytes { ptr in
+                sqlite3_bind_blob(stmt, index, ptr.baseAddress, Int32(ptr.count), SQLITE_TRANSIENT)
+            }
+        } else {
+            sqlite3_bind_null(stmt, index)
+        }
+    }
+
+    private func blob(_ stmt: OpaquePointer?, _ index: Int32) -> Data? {
+        guard sqlite3_column_type(stmt, index) != SQLITE_NULL,
+              let ptr = sqlite3_column_blob(stmt, index) else { return nil }
+        return Data(bytes: ptr, count: Int(sqlite3_column_bytes(stmt, index)))
     }
 
     private func run(_ sql: String, bind: (OpaquePointer?) -> Void) -> Int64 {
@@ -388,7 +424,7 @@ public final class DataStore {
     }
 
     public func update(_ s: Screenshot) {
-        run("UPDATE screenshots SET timestamp=?,file_path=?,image_hash=?,ai_summary=?,ocr_text=?,content_type=?,key_entities=?,key_numbers=?,meeting_relevance=?,sensitivity_level=?,analysis_status=?,active_speaker_name=?,key_dates=?,slide_decisions=?,slide_action_items=?,chart_type=?,chart_insight=? WHERE id=?") { stmt in
+        run("UPDATE screenshots SET timestamp=?,file_path=?,image_hash=?,ai_summary=?,ocr_text=?,content_type=?,key_entities=?,key_numbers=?,meeting_relevance=?,sensitivity_level=?,analysis_status=?,active_speaker_name=?,key_dates=?,slide_decisions=?,slide_action_items=?,chart_type=?,chart_insight=?,speaker_name_source=? WHERE id=?") { stmt in
             bind(stmt, 1, s.timestamp)
             bind(stmt, 2, s.filePath)
             bind(stmt, 3, s.imageHash)
@@ -406,7 +442,8 @@ public final class DataStore {
             bind(stmt, 15, s.slideActionItems)
             bind(stmt, 16, s.chartType)
             bind(stmt, 17, s.chartInsight)
-            sqlite3_bind_int64(stmt, 18, s.id)
+            bind(stmt, 18, s.speakerNameSource)
+            sqlite3_bind_int64(stmt, 19, s.id)
         }
     }
 
@@ -448,8 +485,105 @@ public final class DataStore {
         return t
     }
 
-    private func mapScreenshot(_ stmt: OpaquePointer?) -> Screenshot {
-        let s = Screenshot(timestamp: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 2)),
+    // MARK: - Voiceprint library (cross-meeting speaker recognition)
+
+    private static let speakerColumns = "id,name,name_source,centroid,embedding_count,created_at,last_seen_at"
+
+    private func mapSpeaker(_ stmt: OpaquePointer?) -> VoiceprintSpeaker {
+        let s = VoiceprintSpeaker()
+        s.id = sqlite3_column_int64(stmt, 0)
+        s.name = text(stmt, 1)
+        s.nameSource = text(stmt, 2)
+        s.centroid = blob(stmt, 3).map { VoiceprintSpeaker.unpack($0) }
+        s.embeddingCount = Int(sqlite3_column_int64(stmt, 4))
+        s.createdAt = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 5))
+        s.lastSeenAt = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 6))
+        return s
+    }
+
+    /// All known voices, most recently heard first. Samples are loaded too —
+    /// the library is small (≤ dozens of people) so this stays cheap.
+    public func fetchSpeakers() -> [VoiceprintSpeaker] {
+        let speakers = query("SELECT \(Self.speakerColumns) FROM speakers ORDER BY last_seen_at DESC", map: mapSpeaker)
+        for s in speakers {
+            s.samples = query("SELECT embedding FROM speaker_embeddings WHERE speaker_id=?",
+                              bind: { sqlite3_bind_int64($0, 1, s.id) },
+                              map: { stmt in blob(stmt, 0).map { VoiceprintSpeaker.unpack($0) } ?? [] })
+        }
+        return speakers
+    }
+
+    @discardableResult
+    public func insertSpeaker(_ s: VoiceprintSpeaker) -> Int64 {
+        s.id = run("INSERT INTO speakers(name,name_source,centroid,embedding_count,created_at,last_seen_at) VALUES(?,?,?,?,?,?)") { stmt in
+            bind(stmt, 1, s.name)
+            bind(stmt, 2, s.nameSource)
+            bind(stmt, 3, s.centroid.map { VoiceprintSpeaker.pack($0) })
+            sqlite3_bind_int64(stmt, 4, Int64(s.embeddingCount))
+            bind(stmt, 5, s.createdAt)
+            bind(stmt, 6, s.lastSeenAt)
+        }
+        replaceSpeakerSamples(s)
+        return s.id
+    }
+
+    public func updateSpeaker(_ s: VoiceprintSpeaker) {
+        run("UPDATE speakers SET name=?,name_source=?,centroid=?,embedding_count=?,last_seen_at=? WHERE id=?") { stmt in
+            bind(stmt, 1, s.name)
+            bind(stmt, 2, s.nameSource)
+            bind(stmt, 3, s.centroid.map { VoiceprintSpeaker.pack($0) })
+            sqlite3_bind_int64(stmt, 4, Int64(s.embeddingCount))
+            bind(stmt, 5, s.lastSeenAt)
+            sqlite3_bind_int64(stmt, 6, s.id)
+        }
+        replaceSpeakerSamples(s)
+    }
+
+    private func replaceSpeakerSamples(_ s: VoiceprintSpeaker) {
+        run("DELETE FROM speaker_embeddings WHERE speaker_id=?") { sqlite3_bind_int64($0, 1, s.id) }
+        for sample in s.samples {
+            run("INSERT INTO speaker_embeddings(speaker_id,embedding) VALUES(?,?)") { stmt in
+                sqlite3_bind_int64(stmt, 1, s.id)
+                bind(stmt, 2, VoiceprintSpeaker.pack(sample))
+            }
+        }
+    }
+
+    public func deleteSpeaker(id: Int64) {
+        run("DELETE FROM speaker_embeddings WHERE speaker_id=?") { sqlite3_bind_int64($0, 1, id) }
+        run("DELETE FROM speakers WHERE id=?") { sqlite3_bind_int64($0, 1, id) }
+    }
+
+    public func clearAllSpeakers() {
+        exec("DELETE FROM speaker_embeddings")
+        exec("DELETE FROM speakers")
+    }
+
+    /// Merge `sourceId` into `targetId`: weighted centroid, combined samples
+    /// (kept ≤10), the target keeps its name (manual names always win).
+    public func mergeSpeakers(targetId: Int64, sourceId: Int64) {
+        guard targetId != sourceId,
+              let target = fetchSpeakers().first(where: { $0.id == targetId }),
+              let source = fetchSpeakers().first(where: { $0.id == sourceId }) else { return }
+        let tCount = max(target.embeddingCount, 1)
+        let sCount = max(source.embeddingCount, 1)
+        if let tc = target.centroid, let sc = source.centroid, tc.count == sc.count {
+            target.centroid = zip(tc, sc).map { ($0 * Float(tCount) + $1 * Float(sCount)) / Float(tCount + sCount) }
+        } else if target.centroid == nil {
+            target.centroid = source.centroid
+        }
+        target.embeddingCount = tCount + sCount
+        target.samples = Array((target.samples + source.samples).suffix(10))
+        if target.name?.isEmpty ?? true, let n = source.name, !n.isEmpty {
+            target.name = n
+            target.nameSource = source.nameSource
+        }
+        target.lastSeenAt = max(target.lastSeenAt, source.lastSeenAt)
+        updateSpeaker(target)
+        deleteSpeaker(id: sourceId)
+    }
+
+    private func mapScreenshot(_ stmt: OpaquePointer?) -> Screenshot {        let s = Screenshot(timestamp: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 2)),
                            filePath: text(stmt, 3) ?? "",
                            imageHash: text(stmt, 4))
         s.id = sqlite3_column_int64(stmt, 0)
@@ -468,6 +602,7 @@ public final class DataStore {
         s.slideActionItems = text(stmt, 16)
         s.chartType = text(stmt, 17)
         s.chartInsight = text(stmt, 18)
+        s.speakerNameSource = text(stmt, 19)
         return s
     }
 
@@ -494,7 +629,7 @@ public final class DataStore {
     }
 
     public func fetchScreenshots(sessionId: Int64) -> [Screenshot] {
-        query("SELECT id,session_id,timestamp,file_path,image_hash,ai_summary,ocr_text,content_type,key_entities,key_numbers,meeting_relevance,sensitivity_level,analysis_status,active_speaker_name,key_dates,slide_decisions,slide_action_items,chart_type,chart_insight FROM screenshots WHERE session_id=? ORDER BY timestamp", bind: { sqlite3_bind_int64($0, 1, sessionId) }, map: mapScreenshot)
+        query("SELECT id,session_id,timestamp,file_path,image_hash,ai_summary,ocr_text,content_type,key_entities,key_numbers,meeting_relevance,sensitivity_level,analysis_status,active_speaker_name,key_dates,slide_decisions,slide_action_items,chart_type,chart_insight,speaker_name_source FROM screenshots WHERE session_id=? ORDER BY timestamp", bind: { sqlite3_bind_int64($0, 1, sessionId) }, map: mapScreenshot)
     }
 
     public func fetchDecisions(topicId: Int64) -> [Decision] {

@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import MeetingQCore
 import AVFAudio
 import AVFoundation
 import AudioToolbox
@@ -55,6 +56,7 @@ public final class AudioCaptureServiceImpl: AudioCaptureService {
     public var onAudioData: ((AVAudioPCMBuffer) -> Void)?
     public var onAudioLevel: ((Float) -> Void)?
     public var onSpeechSegmentEnded: (() -> Void)?
+    public var onRemoteSpeechSegment: (([Float]) -> Void)?
 
     private let lock = NSLock()
     private let fifoLock = NSLock()
@@ -92,8 +94,15 @@ public final class AudioCaptureServiceImpl: AudioCaptureService {
     public var currentDeviceName: String? { lock.withLock { _currentDeviceName } }
 
     public init() {
-        vad.onSegment = { [weak self] _ in
+        vad.onSegment = { [weak self] buffer in
             guard let self else { return }
+            if let handler = self.onRemoteSpeechSegment,
+               let channelData = buffer.floatChannelData {
+                let count = Int(buffer.frameLength)
+                if count > 0 {
+                    handler(Array(UnsafeBufferPointer(start: channelData[0], count: count)))
+                }
+            }
             self.onSpeechSegmentEnded?()
             let asr = self.lock.withLock { self._asr }
             if let asr {

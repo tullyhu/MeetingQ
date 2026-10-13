@@ -218,7 +218,7 @@ public final class ConfigurableLlmService: LlmService {
         return result
     }
 
-    static func error(_ message: String) -> NSError {
+    public static func error(_ message: String) -> NSError {
         NSError(domain: "MeetingQ", code: -1, userInfo: [NSLocalizedDescriptionKey: message])
     }
 }

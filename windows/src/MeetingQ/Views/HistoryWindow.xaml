@@ -178,6 +178,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- Empty state -->
@@ -348,8 +349,63 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- Bottom bar -->
+            <!-- ── 问答 rail (W4)：rest / thread 两态，禁用时分原因 ── -->
             <Border Grid.Row="1"
+                    Background="#FAFBFF"
+                    BorderBrush="#EEEEEE" BorderThickness="0,1,0,0"
+                    Padding="16,8"
+                    Visibility="{Binding HasSelected, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <ScrollViewer MaxHeight="220"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding HasChatThread, Converter={StaticResource BoolToVis}}">
+                        <ItemsControl ItemsSource="{Binding ChatTurns}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,4">
+                                        <TextBlock Text="{Binding Question}" FontSize="12" FontWeight="SemiBold"
+                                                   Foreground="#3D4455" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding Answer}" FontSize="12"
+                                                   Foreground="#566070" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- 空闲时的一条建议 chip -->
+                    <Button Content="{Binding ChatSuggestion}"
+                            Style="{StaticResource GhostBtn}"
+                            HorizontalAlignment="Left" Margin="0,0,0,6" Padding="10,4"
+                            Command="{Binding AskSuggestionCommand}"
+                            Visibility="{Binding ShowChatSuggestion, Converter={StaticResource BoolToVis}}"/>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding ChatDraft, UpdateSourceTrigger=PropertyChanged}"
+                                 Padding="10,7" FontSize="12"
+                                 Background="White" BorderBrush="#DDDDDD" BorderThickness="1">
+                            <TextBox.IsEnabled>
+                                <Binding Path="ChatEnabled"/>
+                            </TextBox.IsEnabled>
+                        </TextBox>
+                        <Button Grid.Column="1" Content="↑" Margin="8,0,0,0" Padding="12,6"
+                                Style="{StaticResource GhostBtn}"
+                                Command="{Binding AskAboutMeetingCommand}"
+                                IsEnabled="{Binding ChatEnabled}"/>
+                    </Grid>
+                    <TextBlock Text="{Binding ChatDisabledReason}" FontSize="11" Foreground="#8A93A6"
+                               Margin="2,4,0,0"
+                               Visibility="{Binding ChatDisabled, Converter={StaticResource BoolToVis}}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Bottom bar -->
+            <Border Grid.Row="2"
                     Background="#F5F5F5"
                     BorderBrush="#EEEEEE" BorderThickness="0,1,0,0"
                     Padding="16,10"

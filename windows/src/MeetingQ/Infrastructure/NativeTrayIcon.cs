@@ -21,10 +21,12 @@ internal sealed class NativeTrayIcon : IDisposable
     private const uint NIF_MESSAGE = 0x01;
     private const uint NIF_ICON    = 0x02;
     private const uint NIF_TIP     = 0x04;
+    private const uint NIF_INFO    = 0x10;
 
     private const int WM_LBUTTONDBLCLK = 0x0203;
     private const int WM_RBUTTONUP     = 0x0205;
     private const int WM_CONTEXTMENU   = 0x007B;
+    private const int NIN_BALLOONUSERACTION = 0x0405; // balloon body clicked
     private const uint CALLBACK_MSG    = 0x8001; // WM_APP + 1
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -125,6 +127,22 @@ internal sealed class NativeTrayIcon : IDisposable
         if (_created) Modify(NIF_TIP);
     }
 
+    /// <summary>Fired when the user clicks the body of a balloon shown via <see cref="ShowBalloon"/>.</summary>
+    public event Action? BalloonClicked;
+
+    /// <summary>
+    /// Shows a tray balloon (notification). Used by the meeting watcher for
+    /// start/end prompts — clicking the balloon body confirms the pending action.
+    /// </summary>
+    public void ShowBalloon(string title, string info)
+    {
+        if (!_created) return;
+        var data = Build(NIF_INFO);
+        data.szInfoTitle = title;
+        data.szInfo      = info;
+        Shell_NotifyIcon(NIM_MODIFY, ref data);
+    }
+
     // ── Internal ───────────────────────────────────────────────────────────
 
     private void Create()
@@ -161,6 +179,11 @@ internal sealed class NativeTrayIcon : IDisposable
             {
                 handled = true;
                 DoubleClick?.Invoke();
+            }
+            else if (ev == NIN_BALLOONUSERACTION)
+            {
+                handled = true;
+                BalloonClicked?.Invoke();
             }
             else if (ev == WM_RBUTTONUP || ev == WM_CONTEXTMENU)
             {

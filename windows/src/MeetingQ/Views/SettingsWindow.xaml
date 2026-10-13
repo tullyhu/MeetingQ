@@ -778,6 +778,93 @@
                             </Grid>
                         </StackPanel>
 
+                        <!-- ── 会议自动检测 (W5) ── -->
+                        <Rectangle Height="1" Margin="0,22,0,16" Fill="#E0E0E0"/>
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="{local:Loc SettingsAutoDetectHeader}" Margin="0,0,0,8"/>
+                        <Border Style="{StaticResource InfoBox}" Margin="0,0,0,10">
+                            <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#566070" LineHeight="18"
+                                       Text="{local:Loc SettingsAutoDetectDesc}"/>
+                        </Border>
+                        <Border Background="#FAFAFA" CornerRadius="8"
+                                BorderBrush="#EEEEEE" BorderThickness="1" Padding="10,8" Margin="0,0,0,16">
+                            <ComboBox SelectedValuePath="Tag"
+                                      SelectedValue="{Binding MeetingAutoDetectMode, Mode=TwoWay}">
+                                <ComboBoxItem Tag="off">
+                                    <TextBlock Text="{local:Loc AutoDetectOff}"/>
+                                </ComboBoxItem>
+                                <ComboBoxItem Tag="prompt">
+                                    <TextBlock Text="{local:Loc AutoDetectPrompt}"/>
+                                </ComboBoxItem>
+                                <ComboBoxItem Tag="auto">
+                                    <TextBlock Text="{local:Loc AutoDetectAuto}"/>
+                                </ComboBoxItem>
+                            </ComboBox>
+                        </Border>
+
+                        <!-- ── 声纹库 (W2) ── -->
+                        <Rectangle Height="1" Margin="0,6,0,16" Fill="#E0E0E0"/>
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="{local:Loc SettingsVoiceprintHeader}" Margin="0,0,0,8"/>
+                        <Border Style="{StaticResource InfoBox}" Margin="0,0,0,10">
+                            <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#566070" LineHeight="18"
+                                       Text="{local:Loc SettingsVoiceprintDesc}"/>
+                        </Border>
+                        <Border Background="#FAFAFA" CornerRadius="8"
+                                BorderBrush="#EEEEEE" BorderThickness="1" Padding="10,8">
+                            <StackPanel>
+                                <TextBlock Text="{local:Loc VoiceprintEmpty}" FontSize="12" Foreground="#8A93A6"
+                                           Margin="4,6">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Voiceprints.Count}" Value="0">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <ItemsControl ItemsSource="{Binding Voiceprints}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="2,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                          VerticalAlignment="Center"/>
+                                                <StackPanel Grid.Column="1" Margin="8,0">
+                                                    <TextBlock Text="{Binding DisplayName}" FontSize="13"
+                                                               FontWeight="SemiBold" Foreground="#3D4455"/>
+                                                    <TextBlock Text="{Binding Meta}" FontSize="11" Foreground="#8A93A6"/>
+                                                </StackPanel>
+                                                <Button Grid.Column="2" Content="{local:Loc VoiceprintRename}"
+                                                        Style="{StaticResource TestBtn}" Padding="10,5" Margin="4,0"
+                                                        Command="{Binding DataContext.RenameVoiceprintCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"/>
+                                                <Button Grid.Column="3" Content="{local:Loc CommonDelete}"
+                                                        Style="{StaticResource TestBtn}" Padding="10,5" Margin="4,0"
+                                                        Command="{Binding DataContext.DeleteVoiceprintCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,2" HorizontalAlignment="Right">
+                                    <Button Content="{local:Loc VoiceprintMergeSelected}"
+                                            Style="{StaticResource TestBtn}" Padding="12,6" Margin="4,0"
+                                            Command="{Binding MergeSelectedVoiceprintsCommand}"/>
+                                    <Button Content="{local:Loc VoiceprintClearAll}"
+                                            Style="{StaticResource TestBtn}" Padding="12,6" Margin="4,0"
+                                            Command="{Binding ClearAllVoiceprintsCommand}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

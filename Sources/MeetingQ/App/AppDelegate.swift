@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import MeetingQCore
 import AppKit
 import SwiftUI
 
@@ -37,6 +38,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         _ = DataStore.shared
         _ = AppServices.shared
+
+        // W5: automatic meeting detection (meeting_watcher analogue).
+        MeetingWatcherService.shared.registerNotificationCategories()
+        MeetingWatcherService.shared.start()
 
         statusBar = StatusBarController()
         statusBar?.onQuit = { NSApp.terminate(nil) }

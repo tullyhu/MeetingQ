@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import MeetingQCore
 import CoreGraphics
 import Foundation
 
@@ -65,5 +66,16 @@ public enum WindowListHelper {
 
     public static func windowID(forTitle title: String) -> CGWindowID? {
         listWindows().first { $0.title.localizedCaseInsensitiveContains(title) }?.id
+    }
+
+    /// Whether a window object still exists, without size filtering and
+    /// INCLUDING offscreen/minimized windows. Meeting apps shrink to a mini
+    /// floating window or get minimized mid-meeting — neither means the
+    /// meeting ended; only the window ID disappearing does.
+    public static func windowExists(_ id: CGWindowID) -> Bool {
+        guard let list = CGWindowListCopyWindowInfo([.excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return true // on failure, don't false-trigger a hard end
+        }
+        return list.contains { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value == id }
     }
 }

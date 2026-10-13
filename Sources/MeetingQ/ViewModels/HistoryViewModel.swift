@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import MeetingQCore
 import Foundation
 import AppKit
 import UniformTypeIdentifiers
@@ -391,10 +392,74 @@ public final class HistoryViewModel {
 
     public func selectSession(_ item: SessionItem?) {
         selectedSession = item
+        chatTurns = []
         detailTask?.cancel()
         detailTask = nil
         guard let item, !loadedIds.contains(item.sessionId) else { return }
         loadDetail(item.sessionId)
+    }
+
+    // MARK: - Meeting chat rail (ask questions about a finished meeting)
+
+    public struct ChatTurn: Identifiable, Sendable {
+        public let id = UUID()
+        public let question: String
+        public let answer: String
+        public let isError: Bool
+    }
+
+    public private(set) var chatTurns: [ChatTurn] = []
+    public var isChatAnswering = false
+
+    /// Answers a question against the selected meeting's transcript via the
+    /// active LLM profile. See docs/speaker_diarization_spec.md siblings for
+    /// the rail behavior contract (rest/peek/thread states).
+    public func askAboutMeeting(_ question: String) async {
+        guard let session = selectedSession, !question.trimmingCharacters(in: .whitespaces).isEmpty,
+              !isChatAnswering else { return }
+        isChatAnswering = true
+        defer { isChatAnswering = false }
+
+        let lines = session.transcripts.suffix(200).map { item in
+            let speaker = item.speaker.map { "\($0): " } ?? ""
+            return "[\(item.timeLabel)] \(speaker)\(item.text)"
+        }.joined(separator: "\n")
+
+        let prompt: String
+        if AppLanguage.current.isEnglish {
+            prompt = """
+            You are answering questions about a finished meeting. Use only the transcript below as evidence; if the answer is not in the transcript, say so plainly.
+
+            [Transcript]
+            \(lines)
+
+            [Question]
+            \(question)
+
+            Answer concisely in 1-4 sentences.
+            """
+        } else {
+            prompt = """
+            你在回答关于一场已结束会议的问题。只以下面的转录内容为依据；转录中没有的答案请直接说明。
+
+            【转录内容】
+            \(lines)
+
+            【问题】
+            \(question)
+
+            请用 1-4 句话简明回答。
+            """
+        }
+
+        do {
+            let answer = try await AppServices.shared.llm.analyze(prompt)
+            chatTurns.append(ChatTurn(question: question, answer: answer, isError: false))
+        } catch {
+            chatTurns.append(ChatTurn(question: question,
+                                      answer: tr("回答失败：\(error.localizedDescription)", "Failed: \(error.localizedDescription)"),
+                                      isError: true))
+        }
     }
 
     private func loadDetail(_ sessionId: Int64) {

@@ -258,6 +258,9 @@ public partial class HistoryViewModel : ObservableObject
     partial void OnSelectedSessionChanged(SessionItem? value)
     {
         HasSelected = value is not null;
+        ChatTurns.Clear();
+        ChatDraft = string.Empty;
+        NotifyChatStateChanged();
         var cts = _detailLoadCts;
         _detailLoadCts = null;
         cts?.Cancel();
@@ -267,6 +270,105 @@ public partial class HistoryViewModel : ObservableObject
             _detailLoadCts = new CancellationTokenSource();
             _ = LoadDetailAsync(value.SessionId, _detailLoadCts.Token);
         }
+    }
+
+    // ── 问答 rail (W4) ────────────────────────────────────────────────────
+
+    public sealed record ChatTurn(string Question, string Answer, bool IsError);
+
+    public ObservableCollection<ChatTurn> ChatTurns { get; } = new();
+
+    [ObservableProperty] private string _chatDraft = string.Empty;
+    [ObservableProperty] private bool _isChatAnswering;
+
+    public bool HasChatThread => ChatTurns.Count > 0;
+    private static bool HasLlm => LlmProfileStore.GetActive() is not null;
+
+    public bool ChatEnabled =>
+        SelectedSession?.HasTranscripts == true && HasLlm && !IsChatAnswering;
+    public bool ChatDisabled => !ChatEnabled && !IsChatAnswering;
+
+    /// <summary>Why asking is unavailable (no transcript vs no LLM configured).</summary>
+    public string ChatDisabledReason
+    {
+        get
+        {
+            if (SelectedSession?.HasTranscripts != true) return LocalizationManager.Get("ChatNoTranscript");
+            if (!HasLlm) return LocalizationManager.Get("ChatNoLlm");
+            return string.Empty;
+        }
+    }
+
+    public string ChatSuggestion => LocalizationManager.Get("ChatSuggestionCommitments");
+    public bool ShowChatSuggestion => !HasChatThread && ChatEnabled;
+
+    private void NotifyChatStateChanged()
+    {
+        OnPropertyChanged(nameof(HasChatThread));
+        OnPropertyChanged(nameof(ChatEnabled));
+        OnPropertyChanged(nameof(ChatDisabled));
+        OnPropertyChanged(nameof(ChatDisabledReason));
+        OnPropertyChanged(nameof(ChatSuggestion));
+        OnPropertyChanged(nameof(ShowChatSuggestion));
+    }
+
+    [RelayCommand]
+    private Task AskSuggestionAsync() => AskAboutMeetingAsync();
+
+    [RelayCommand]
+    private async Task AskAboutMeetingAsync()
+    {
+        var session = SelectedSession;
+        var question = ChatDraft.Trim();
+        if (session is null) return;
+        if (string.IsNullOrEmpty(question) && !HasChatThread)
+            question = ChatSuggestion;
+        if (string.IsNullOrEmpty(question) || !ChatEnabled) return;
+
+        ChatDraft = string.Empty;
+        IsChatAnswering = true;
+        NotifyChatStateChanged();
+        try
+        {
+            var answer = await Task.Run(async () =>
+            {
+                var prompt = BuildChatPrompt(session, question);
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+                return await _llm.AnalyzeAsync(prompt, cts.Token);
+            });
+            ChatTurns.Add(new ChatTurn(question, answer.Trim(), IsError: false));
+        }
+        catch (Exception ex)
+        {
+            ChatTurns.Add(new ChatTurn(question, ex.Message, IsError: true));
+        }
+        finally
+        {
+            IsChatAnswering = false;
+            NotifyChatStateChanged();
+        }
+    }
+
+    private static string BuildChatPrompt(SessionItem session, string question)
+    {
+        var isEn = LocalizationManager.Instance.IsEnglish;
+        var sb = new StringBuilder();
+        sb.AppendLine(isEn
+            ? "Answer the question strictly based on the meeting transcript below. If the transcript does not contain the answer, say so."
+            : "请严格根据下面的会议转录回答问题。如果转录中没有答案，请明说。");
+        sb.AppendLine();
+        sb.AppendLine(isEn ? "## Transcript" : "## 转录");
+        var budget = 12000;
+        foreach (var t in session.Transcripts)
+        {
+            var line = $"[{t.TimeLabel}] {(string.IsNullOrEmpty(t.Speaker) ? "" : t.Speaker + ": ")}{t.Text}";
+            if (line.Length > budget) break;
+            sb.AppendLine(line);
+            budget -= line.Length;
+        }
+        sb.AppendLine();
+        sb.AppendLine(isEn ? $"## Question\n{question}" : $"## 问题\n{question}");
+        return sb.ToString();
     }
 
     private async Task LoadDetailAsync(int sessionId, CancellationToken ct = default)

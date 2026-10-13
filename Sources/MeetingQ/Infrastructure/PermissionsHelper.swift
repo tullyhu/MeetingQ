@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import MeetingQCore
+import ApplicationServices
 import CoreGraphics
 import Speech
 import AVFoundation
@@ -43,5 +45,14 @@ public enum PermissionsHelper {
 
     public static func requestMicrophone() async -> Bool {
         await AVCaptureDevice.requestAccess(for: .audio)
+    }
+
+    public static func accessibilityGranted() -> Bool {
+        AXIsProcessTrusted()
+    }
+
+    @discardableResult
+    public static func requestAccessibility() -> Bool {
+        AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
     }
 }

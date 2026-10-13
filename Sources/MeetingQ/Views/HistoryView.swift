@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import MeetingQCore
 import SwiftUI
 import AppKit
 
@@ -214,7 +215,8 @@ private struct SessionDetailView: View {
     let onDelete: () -> Void
 
     var body: some View {
-        ScrollView {
+        VStack(spacing: 0) {
+            ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 10) {
                     Spacer()
@@ -407,7 +409,122 @@ private struct SessionDetailView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(EdgeInsets(top: 20, leading: 24, bottom: 20, trailing: 24))
+            }
+            Divider()
+            MeetingChatRail(session: session, vm: vm)
         }
+    }
+}
+
+/// Bottom ask-line for a finished meeting (rest / peek / thread states).
+/// Borrowed from screenpipe's meeting chat rail spec: a persistent 44px
+/// composer that peeks on focus (not persisted) and only grows into a thread
+/// after the first turn. Thread height is persisted; peek height is not.
+/// Disabled with a reason when there is no transcript or no active LLM.
+private struct MeetingChatRail: View {
+    let session: SessionItem
+    let vm: HistoryViewModel
+
+    @State private var draft = ""
+    @State private var threadHeight: Double = {
+        Double(KeychainStorage.load(StoreKeys.chatThreadHeight) ?? "") ?? 200
+    }()
+    @FocusState private var composerFocused: Bool
+
+    private var hasThread: Bool { !vm.chatTurns.isEmpty }
+    private var canAsk: Bool { session.hasTranscripts && hasLlm && !vm.isChatAnswering }
+    private var hasLlm: Bool { LlmProfileStore.active() != nil }
+
+    /// Why asking is unavailable, shown as the placeholder.
+    private var disabledReason: String? {
+        if !session.hasTranscripts { return tr("暂无转录，无法提问", "Nothing recorded yet") }
+        if !hasLlm { return tr("请先在设置中配置大模型", "Configure an LLM in Settings first") }
+        return nil
+    }
+
+    private var suggestions: [String] {
+        [tr("我在这场会议承诺了什么？", "What did I commit to in this meeting?"),
+         tr("有哪些行动项和负责人？", "What are the action items and owners?")]
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if hasThread {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(vm.chatTurns) { turn in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(turn.question)
+                                    .font(.callout.weight(.medium))
+                                Text(turn.answer)
+                                    .font(.callout)
+                                    .foregroundStyle(turn.isError ? .red : .primary)
+                                    .textSelection(.enabled)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(12)
+                }
+                .frame(height: max(120, threadHeight))
+                .gesture(
+                    DragGesture(minimumDistance: 4).onChanged { value in
+                        threadHeight = min(400, max(120, threadHeight - value.translation.height / 8))
+                    }.onEnded { _ in
+                        KeychainStorage.save(StoreKeys.chatThreadHeight, value: String(threadHeight))
+                    }
+                )
+                Divider()
+            }
+
+            HStack(spacing: 8) {
+                TextField(disabledReason ?? tr("问问这场会议…", "Ask about this meeting…"),
+                          text: $draft)
+                    .textFieldStyle(.plain)
+                    .focused($composerFocused)
+                    .disabled(disabledReason != nil)
+                    .onSubmit(send)
+                if vm.isChatAnswering {
+                    ProgressView().controlSize(.small)
+                }
+                Button(action: send) {
+                    Image(systemName: "arrow.up.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .disabled(!canAsk || draft.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 44)
+
+            // One resting suggestion line when idle; tap to ask directly.
+            if !hasThread, disabledReason == nil, let suggestion = suggestions.first {
+                HStack {
+                    Button(action: { ask(suggestion) }) {
+                        Text(suggestion)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        // Peek: focusing the composer with no thread yet grows a little,
+        // and that height is deliberately not persisted.
+        .frame(height: composerFocused && !hasThread ? 44 + 60 : nil, alignment: .bottom)
+        .clipped()
+    }
+
+    private func send() { ask(draft) }
+
+    private func ask(_ q: String) {
+        let question = q.trimmingCharacters(in: .whitespaces)
+        guard !question.isEmpty, canAsk else { return }
+        draft = ""
+        Task { await vm.askAboutMeeting(question) }
     }
 }
 

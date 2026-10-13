@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import MeetingQCore
 import SwiftUI
 
 public struct SettingsView: View {
@@ -145,13 +146,136 @@ public struct SettingsView: View {
             }
 
             Section {
+                LabeledContent(tr("辅助功能权限", "Accessibility Permission")) {
+                    if vm.accessibilityGranted {
+                        Text(tr("已授权", "Granted"))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Button(tr("去授权", "Grant Access")) { vm.requestAccessibilityPermission() }
+                    }
+                }
+            } header: {
+                Text(tr("发言人识别", "Speaker Detection"))
+            } footer: {
+                Text(tr("授权后可直接从会议软件的界面元素读取「正在发言」的人名，比截图识别更快更准；未授权时自动回退到截图识别。",
+                        "Once granted, the app reads the active speaker's name directly from the meeting app's UI — faster and more accurate than screenshot recognition. Without it, screenshot recognition is used as fallback."))
+            }
+
+            Section {
+                Picker(tr("会议自动检测", "Meeting Auto-Detection"), selection: Binding(
+                    get: { MeetingWatcherService.shared.mode },
+                    set: { MeetingWatcherService.shared.setMode($0) })) {
+                    ForEach(MeetingWatcherService.Mode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+            } header: {
+                Text(tr("会议自动检测", "Meeting Auto-Detection"))
+            } footer: {
+                Text(tr("通过候选窗口与音频输出占用识别会议开始。检测到时自动选择会议窗口；「仅提示」会先询问，「自动开始」直接开始监听。窗口真正销毁才会自动结束，疑似散会只会提示确认。",
+                        "Detects meeting starts via candidate windows and audio-output usage. On detection it auto-selects the meeting window; \"Prompt Only\" asks first, \"Auto Start\" begins listening immediately. Only actual window destruction ends capture automatically — a suspected end always asks."))
+            }
+
+            Section {
+                Toggle(tr("说话人分离（Beta）", "Speaker Diarization (Beta)"), isOn: Binding(
+                    get: { vm.speakerDiarizationEnabled },
+                    set: { vm.setSpeakerDiarizationEnabled($0) }))
+                    .disabled(vm.diarizationModelDownloading)
+                if vm.speakerDiarizationEnabled {
+                    Toggle(tr("实时显示「对方1/对方2」", "Show \"Speaker 1/2\" live"), isOn: Binding(
+                        get: { vm.speakerLiveLabelsEnabled },
+                        set: { vm.setSpeakerLiveLabelsEnabled($0) }))
+                }
+                if vm.diarizationModelDownloading {
+                    ProgressView(value: vm.diarizationModelProgress)
+                }
+                if !vm.diarizationModelStatus.isEmpty {
+                    Text(vm.diarizationModelStatus)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text(tr("说话人分离", "Speaker Diarization"))
+            } footer: {
+                Text(tr("使用设备端声纹模型把「对方」细分为多个说话人，首次开启需下载约 15MB 模型，全程离线运行。效果因会议环境而异，关闭后完全回到原有表现。",
+                        "Uses an on-device voiceprint model to split \"Remote\" into individual speakers. First enable downloads ~15MB of models; everything runs offline. Results vary by meeting environment; turning it off fully restores previous behavior."))
+            }
+
+            Section {
+                if vm.voiceprints.isEmpty {
+                    Text(tr("暂无声纹记录。开启说话人分离并完成会议后，识别到的声音会出现在这里。",
+                            "No voiceprints yet. With diarization enabled, voices recognized in meetings will appear here."))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(vm.voiceprints, id: \.id) { sp in
+                        HStack(spacing: 8) {
+                            Text(vm.displayName(for: sp))
+                                .fontWeight(sp.isNamed ? .regular : .medium)
+                            if sp.isManuallyNamed {
+                                Text(tr("手动", "manual")).font(.caption2).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(tr("\(sp.embeddingCount) 个样本", "\(sp.embeddingCount) samples"))
+                                .font(.caption).foregroundStyle(.secondary)
+                            Button(tr("改名", "Rename")) {
+                                vm.renamingVoiceprintId = sp.id
+                                vm.renamingVoiceprintName = sp.name ?? ""
+                            }
+                            Menu(tr("合并到…", "Merge into…")) {
+                                ForEach(vm.voiceprints.filter { $0.id != sp.id }, id: \.id) { target in
+                                    Button(vm.displayName(for: target)) {
+                                        vm.mergeVoiceprints(targetId: target.id, sourceId: sp.id)
+                                    }
+                                }
+                            }
+                            .disabled(vm.voiceprints.count < 2)
+                            Button(tr("删除", "Delete"), role: .destructive) { vm.deleteVoiceprint(id: sp.id) }
+                        }
+                    }
+                    HStack {
+                        Spacer()
+                        Button(vm.confirmClearVoiceprints
+                               ? tr("再次点击确认清空", "Click again to confirm")
+                               : tr("清空全部声纹", "Clear All Voiceprints"), role: .destructive) {
+                            if vm.confirmClearVoiceprints {
+                                vm.clearAllVoiceprints()
+                                vm.confirmClearVoiceprints = false
+                            } else {
+                                vm.confirmClearVoiceprints = true
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text(tr("声纹库", "Voiceprint Library"))
+            } footer: {
+                Text(tr("声纹是无法还原为语音的数学特征向量，仅保存在本机。改名后，下次会议中该人的发言会直接显示真名。",
+                        "A voiceprint is a mathematical feature vector that cannot be turned back into audio and is stored on this machine only. Renamed voices show their real name in future meetings."))
+            }
+
+            Section {
                 Link(tr("隐私政策", "Privacy Policy"),
                      destination: URL(string: "https://meetingq-privacy.tully-hu.workers.dev/macos/")!)
+                Link(tr("开源致谢", "Open Source Acknowledgements"),
+                     destination: URL(string: "https://github.com/tullyhu/MeetingQ/blob/main/ACKNOWLEDGEMENTS.md")!)
             } header: {
                 Text(tr("关于", "About"))
             }
         }
         .formStyle(.grouped)
+        .alert(tr("重命名声纹", "Rename Voiceprint"), isPresented: Binding(
+            get: { vm.renamingVoiceprintId != nil },
+            set: { if !$0 { vm.renamingVoiceprintId = nil } })) {
+            TextField(tr("真实姓名", "Real name"), text: $vm.renamingVoiceprintName)
+            Button(tr("保存", "Save")) {
+                if let id = vm.renamingVoiceprintId { vm.renameVoiceprint(id: id, to: vm.renamingVoiceprintName) }
+                vm.renamingVoiceprintId = nil
+            }
+            Button(tr("取消", "Cancel"), role: .cancel) { vm.renamingVoiceprintId = nil }
+        } message: {
+            Text(tr("下次会议中该人的发言将直接显示这个名字。",
+                    "This person's speech will show this name in future meetings."))
+        }
     }
 
     // MARK: - Tab 1: 个人身份

@@ -48,6 +48,10 @@ public protocol AudioCaptureService: AnyObject {
     var onAudioData: ((AVAudioPCMBuffer) -> Void)? { get set }
     var onAudioLevel: ((Float) -> Void)? { get set }
     var onSpeechSegmentEnded: (() -> Void)? { get set }
+    /// VAD-delimited speech segments of the remote (system-audio) track,
+    /// 16 kHz mono Float32. Used by speaker diarization; nil when the feature
+    /// is off, in which case no extra work happens.
+    var onRemoteSpeechSegment: (([Float]) -> Void)? { get set }
     var isCapturing: Bool { get }
     var currentDeviceName: String? { get }
 

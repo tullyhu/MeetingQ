@@ -28,6 +28,43 @@ public enum QuestionStatus: String, Codable, Sendable {
     case pending, acknowledged, dismissed
 }
 
+/// How a voiceprint entry got its name: manually by the user (wins over
+/// everything) or automatically from OCR/AX "currently speaking" votes.
+public enum VoiceprintNameSource: String, Codable, Sendable {
+    case manual, auto
+}
+
+/// A known remote voice in the long-term, cross-meeting voiceprint library.
+/// Embeddings are 192-d CAM++ vectors; they cannot be converted back into
+/// audio. Stored locally only.
+public final class VoiceprintSpeaker {
+    public static let embeddingDimension = 192
+
+    public var id: Int64 = 0
+    public var name: String?
+    public var nameSource: String?
+    /// Running-average embedding (L2-normalized 192-d), SQLite BLOB.
+    public var centroid: [Float]?
+    public var embeddingCount: Int = 0
+    public var createdAt: Date = Date()
+    public var lastSeenAt: Date = Date()
+    /// Retained sample embeddings (≤10) for matching.
+    public var samples: [[Float]] = []
+
+    public init() {}
+
+    public var isNamed: Bool { !(name?.isEmpty ?? true) }
+    public var isManuallyNamed: Bool { nameSource == VoiceprintNameSource.manual.rawValue }
+
+    public static func pack(_ v: [Float]) -> Data {
+        v.withUnsafeBytes { Data($0) }
+    }
+
+    public static func unpack(_ data: Data) -> [Float] {
+        data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+    }
+}
+
 public final class MeetingSession {
     public var id: Int64 = 0
     public var startTime: Date
@@ -118,6 +155,8 @@ public final class Screenshot {
     public var sensitivityLevel: String?
     public var analysisStatus: String?
     public var activeSpeakerName: String?
+    /// How activeSpeakerName was obtained: "ax" (accessibility tree) or "vision" (LLM/OCR).
+    public var speakerNameSource: String?
     public weak var session: MeetingSession?
     public var sessionId: Int64 = 0
 

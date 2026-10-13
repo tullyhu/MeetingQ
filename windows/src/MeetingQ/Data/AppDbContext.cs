@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<Decision> Decisions { get; set; }
     public DbSet<Question> Questions { get; set; }
     public DbSet<ActionItem> ActionItems { get; set; }
+    public DbSet<VoiceprintSpeaker> VoiceprintSpeakers { get; set; }
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {

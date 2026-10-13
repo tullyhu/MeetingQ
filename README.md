@@ -8,7 +8,7 @@
   <img alt="macOS" src="https://img.shields.io/badge/macOS-15%2B-black">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-native-black">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-5.10-orange">
-  <img alt="Dependencies" src="https://img.shields.io/badge/dependencies-0-brightgreen">
+  <img alt="Dependencies" src="https://img.shields.io/badge/dependencies-1%20(FluidAudio)-brightgreen">
   <img alt="License" src="https://img.shields.io/badge/license-GPLv3-blue">
 </p>
 
@@ -23,7 +23,7 @@ MeetingQ 就是为这一刻而生的：
 1. **它一直在听** —— 系统音频实时转写成文字，全程在你的 Mac 本地完成
 2. **它认得你** —— 有人叫到你名字（包括同音误读），0.5 秒内弹窗提醒
 3. **它帮你补上下文** —— 弹窗里附上被叫瞬间的截图、原话、前后 8 条对话，以及 AI 提取出的"对方抛给你的问题"
-4. **它把纪要也写了** —— 散会后一键生成摘要、决策、行动项，导出 Markdown / HTML / TXT
+4. **它把纪要也写了** —— 散会后一键生成摘要、决策、行动项，导出 Markdown / HTML / TXT；历史会议页底部还可以直接对整场会议提问（"我这场的承诺是什么？"）
 
 ## 功能特性
 
@@ -35,11 +35,16 @@ MeetingQ 就是为这一刻而生的：
 ### 🗣️ 双轨发言人识别
 - **麦克风轨与系统音轨独立转写**：你的发言 100% 准确归属（显示为你的名字），远程参会者归入"对方"轨——不依赖任何声纹模型，物理声道隔离天然不会标错
 - **扬声器回声消除**：麦克风采集启用系统级 AEC（声学回声消除），并叠加跨轨文本去重——外放开会时对方的声音不会被麦克风二次收录成"你说的话"
-- **会末自动命名**：结合截图 OCR 识别出的"正在发言"人名，按时间戳做距离加权投票为"对方"命名；仅当证据明确收敛时才替换，多人远程会议宁可保留"对方"也不张冠李戴
+- **会末自动命名**：结合"正在发言"人名识别（优先读取会议软件界面元素，截图 OCR 兜底），按时间戳做距离加权投票为"对方"命名；仅当证据明确收敛时才替换，多人远程会议宁可保留"对方"也不张冠李戴
+- **说话人分离（Beta，默认关闭）**：可选开启设备端声纹模型（CAM++，约 15MB，完全离线），把"对方"细分为"对方1/对方2…"；跨会议声纹库支持手动改名、合并与清空，改名后的老熟人在下次会议直接显示真名。效果不佳可随时关闭，完全回到原有表现
 - 浮动窗与会议纪要中按发言人分段展示，谁说了什么一目了然
 
-### 🔔 被叫姓名提醒（核心功能）
-三层检测管道，兼顾速度与准确率：
+### 🪟 会议自动检测（v1.8 新增）
+- **开会自动发现**：通过候选窗口 + 音频输出占用识别会议开始（会议软件整场都持有音频输出，关麦关摄像头"纯听会"也能识别）；支持 Zoom / 腾讯会议 / 飞书 / 钉钉 / Teams / Webex / FaceTime，浏览器按会议域名识别，陌生会议软件可一键教学
+- **三档模式**（设置 → 通用）：自动开始 / 仅提示（默认）/ 关闭；检测到时自动选中会议窗口
+- **散会不误判**：小窗、最小化都不算结束；只有窗口真正销毁才自动停止，疑似散会（对方静音 1 分钟）只弹提示等你确认
+
+### 🔔 被叫姓名提醒（核心功能）三层检测管道，兼顾速度与准确率：
 
 | 层级 | 技术 | 耗时 | 作用 |
 |------|------|------|------|
@@ -113,7 +118,7 @@ cd MeetingQ
 ./scripts/bundle.sh
 
 # 生成 DMG
-VERSION=1.3.0 ./scripts/package-dmg.sh
+VERSION=1.8.0 ./scripts/package-dmg.sh
 ```
 
 **要求**：运行需 macOS 15+ · Apple Silicon；编译需 Xcode 26+ 或 Command Line Tools（macOS 26 SDK，无需任何第三方依赖，纯 `swiftc` 编译）
@@ -233,4 +238,14 @@ Issue 和 PR 欢迎。提交前请运行 `./scripts/bundle.sh` 确认编译通�
 ## License
 
 [GPLv3](LICENSE) — 你可以自由使用、修改和分发本软件，但衍生作品必须以相同协议开源。
+
+### 第三方组件声明
+
+MeetingQ 使用了以下第三方开源组件与模型，其许可证均为 Apache 2.0 / MIT（与 GPLv3 兼容），**许可证全文已随应用打包**于 `MeetingQ.app/Contents/Resources/Licenses/`：
+
+- **[FluidAudio](https://github.com/FluidInference/FluidAudio)**（Apache 2.0）— 设备端说话人分离的推理运行时与模型分发
+- **CAM++ 声纹模型**（Apache 2.0，阿里达摩院 3D-Speaker，经 FluidAudio 转换为 CoreML）— 192 维说话人声纹 embedding
+- **[pyannote-audio](https://github.com/pyannote/pyannote-audio)**（MIT）— 语音分段管线的基础模型设计
+
+完整说明见 [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md)。按上述许可证要求，特此声明：使用这些组件不意味着原作者对本项目的背书。Windows 版的第三方组件声明见 [windows/THIRD-PARTY-LICENSES.txt](windows/THIRD-PARTY-LICENSES.txt)。
 

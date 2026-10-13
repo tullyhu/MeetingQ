@@ -8,7 +8,7 @@
   <img alt="macOS" src="https://img.shields.io/badge/macOS-15%2B-black">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-native-black">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-5.10-orange">
-  <img alt="Dependencies" src="https://img.shields.io/badge/dependencies-0-brightgreen">
+  <img alt="Dependencies" src="https://img.shields.io/badge/dependencies-1%20(FluidAudio)-brightgreen">
   <img alt="License" src="https://img.shields.io/badge/license-GPLv3-blue">
 </p>
 
@@ -35,7 +35,8 @@ MeetingQ is built for exactly that moment:
 ### 🗣️ Dual-Track Speaker Identification
 - **Independent mic and system-audio tracks**: your speech is attributed with 100% accuracy (shown under your name); remote participants go to the "other party" track — no voiceprint models needed, physical channel isolation can't mix people up
 - **Speakerphone echo cancellation**: OS-level AEC on mic capture plus cross-track text dedup — on speakers, the remote voice is never re-captured by the mic and shown as your own words
-- **Automatic naming at meeting end**: weighted voting correlates transcript timestamps with "currently speaking" names OCR'd from screenshots; a name is only assigned when the evidence clearly converges — multi-party remote meetings stay labeled "other party" rather than risk a wrong guess
+- **Automatic naming at meeting end**: weighted voting correlates transcript timestamps with "currently speaking" names — read directly from the meeting app's accessibility tree when permitted, with screenshot OCR as fallback; a name is only assigned when the evidence clearly converges — multi-party remote meetings stay labeled "other party" rather than risk a wrong guess
+- **Speaker diarization (Beta, off by default)**: optionally split "Remote" into per-person clusters ("Speaker 1/2…") with an on-device CAM++ voiceprint model (~15MB, fully offline, downloaded on first enable). A cross-meeting voiceprint library supports manual rename/merge/clear; renamed voices show their real name in future meetings. Turn it off anytime to restore the previous behavior exactly
 - Transcripts and minutes are segmented by speaker, so it's clear who said what
 
 ### 🔔 Name Call-Out Alerts (Core Feature)
@@ -48,6 +49,11 @@ A three-layer detection pipeline balancing speed and accuracy:
 | 2 | LLM semantic analysis | 1-3s | Judges with your name/role whether you're being addressed, and extracts the actual question |
 
 On a hit: popup alert (can be pinned) → instant screenshot → shows the original sentence + 8 lines of context + the AI-extracted questions for you to answer. Homophone misreads found via pinyin matching are **learned automatically** and take the fast path next time.
+
+### 🪟 Automatic Meeting Detection (New in v1.8)
+- **Meetings find themselves**: detects a meeting start via candidate windows + audio-output usage (meeting apps hold audio output for the entire call — works even when you're a muted, camera-off listener). Covers Zoom / Tencent Meeting / Feishu / DingTalk / Teams / Webex / FaceTime; browsers are matched by meeting domains; unknown meeting apps can be taught with one click
+- **Three modes** (Settings → General): Auto Start / Prompt Only (default) / Off — the meeting window is auto-selected on detection
+- **No false endings**: a shrunken mini-window or minimize never counts as "over". Only the window actually being destroyed stops capture automatically; a suspected end (remote side silent for 1 minute) only prompts you to confirm
 
 ### 🧠 AI Meeting Minutes (Local or Cloud — Your Choice)
 - **Local LLM first**: designed for large-memory Apple Silicon Macs — connect directly to a local OpenAI-compatible server such as oMLX. Zero API cost, fully offline, data never leaves the machine
@@ -111,7 +117,7 @@ cd MeetingQ
 ./scripts/bundle.sh
 
 # Generate a DMG
-VERSION=1.3.0 ./scripts/package-dmg.sh
+VERSION=1.8.0 ./scripts/package-dmg.sh
 ```
 
 **Requirements**: runs on macOS 15+ · Apple Silicon; building requires Xcode 26+ or Command Line Tools (macOS 26 SDK; zero third-party dependencies, pure `swiftc` build)
@@ -231,3 +237,13 @@ Issues and PRs are welcome. Please run `./scripts/bundle.sh` to confirm the buil
 ## License
 
 [GPLv3](LICENSE) — you are free to use, modify and distribute this software, but derivative works must be open-sourced under the same license.
+
+### Third-Party Notices
+
+MeetingQ uses the following third-party open-source components and models, all under Apache 2.0 / MIT (GPLv3-compatible). **Full license texts ship inside the app bundle** at `MeetingQ.app/Contents/Resources/Licenses/`:
+
+- **[FluidAudio](https://github.com/FluidInference/FluidAudio)** (Apache 2.0) — on-device speaker-diarization inference runtime and model distribution
+- **CAM++ speaker-embedding model** (Apache 2.0, Alibaba DAMO 3D-Speaker, converted to CoreML by FluidAudio) — 192-dim speaker voiceprints
+- **[pyannote-audio](https://github.com/pyannote/pyannote-audio)** (MIT) — base model design of the speech-segmentation pipeline
+
+See [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md) for details. As required by these licenses: use of these components does not imply endorsement by their authors. Third-party notices for the Windows version live in [windows/THIRD-PARTY-LICENSES.txt](windows/THIRD-PARTY-LICENSES.txt).

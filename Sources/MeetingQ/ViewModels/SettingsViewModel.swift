@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import MeetingQCore
 import AppKit
 import Foundation
 
@@ -164,10 +165,119 @@ public final class SettingsViewModel {
         savedDataDirectory = dataDirectory
         dataDirStatus = ""
 
+        accessibilityGranted = PermissionsHelper.accessibilityGranted()
+
+        speakerDiarizationEnabled = KeychainStorage.loadBool(StoreKeys.speakerDiarizationEnabled)
+        speakerLiveLabelsEnabled = KeychainStorage.loadBool(StoreKeys.speakerLiveLabelsEnabled, default: true)
+        if speakerDiarizationEnabled { diarizationModelStatus = tr("已启用", "Enabled") }
+        loadVoiceprints()
+
         llmProfiles = LlmProfileStore.load().map { LlmProfileItem.fromModel($0) }
         selectedProfile = llmProfiles.first(where: \.isActive) ?? llmProfiles.first
 
         savedSignature = currentSignature()
+    }
+
+    public var accessibilityGranted = false
+
+    public func requestAccessibilityPermission() {
+        PermissionsHelper.requestAccessibility()
+        // The system prompt is async; refresh state shortly after.
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            self?.accessibilityGranted = PermissionsHelper.accessibilityGranted()
+        }
+    }
+
+    // MARK: - Speaker diarization (Beta)
+
+    public var speakerDiarizationEnabled = false
+    public var speakerLiveLabelsEnabled = true
+    public var diarizationModelStatus = ""
+    public var diarizationModelDownloading = false
+    public var diarizationModelProgress: Double = 0
+
+    private var diarizationPreparer: SpeakerDiarizationService?
+
+    /// Toggle handler: enabling triggers the one-time model download; a failed
+    /// download reverts the toggle so the feature can never half-activate.
+    public func setSpeakerDiarizationEnabled(_ on: Bool) {
+        guard on else {
+            speakerDiarizationEnabled = false
+            KeychainStorage.saveBool(StoreKeys.speakerDiarizationEnabled, false)
+            diarizationModelStatus = ""
+            return
+        }
+        speakerDiarizationEnabled = true
+        diarizationModelDownloading = true
+        diarizationModelProgress = 0
+        diarizationModelStatus = tr("正在下载声纹模型…", "Downloading voiceprint models…")
+        let svc = SpeakerDiarizationService()
+        diarizationPreparer = svc
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await svc.prepare { [weak self] p in
+                    Task { @MainActor in self?.diarizationModelProgress = p }
+                }
+                self.diarizationModelDownloading = false
+                self.diarizationModelStatus = tr("模型已就绪", "Models ready")
+                KeychainStorage.saveBool(StoreKeys.speakerDiarizationEnabled, true)
+                KeychainStorage.saveBool(StoreKeys.speakerLiveLabelsEnabled, self.speakerLiveLabelsEnabled)
+            } catch {
+                self.diarizationModelDownloading = false
+                self.speakerDiarizationEnabled = false
+                KeychainStorage.saveBool(StoreKeys.speakerDiarizationEnabled, false)
+                self.diarizationModelStatus = tr("模型下载失败：\(error.localizedDescription)",
+                                                 "Model download failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    public func setSpeakerLiveLabelsEnabled(_ on: Bool) {
+        speakerLiveLabelsEnabled = on
+        KeychainStorage.saveBool(StoreKeys.speakerLiveLabelsEnabled, on)
+    }
+
+    // MARK: - Voiceprint library
+
+    public var voiceprints: [VoiceprintSpeaker] = []
+    public var confirmClearVoiceprints = false
+    public var renamingVoiceprintId: Int64?
+    public var renamingVoiceprintName = ""
+
+    public func loadVoiceprints() {
+        voiceprints = DataStore.shared.fetchSpeakers()
+    }
+
+    public func displayName(for s: VoiceprintSpeaker) -> String {
+        if let n = s.name, !n.isEmpty { return n }
+        let suffix = String(String(s.id).suffix(4))
+        return tr("声纹 \(suffix)", "Voiceprint \(suffix)")
+    }
+
+    public func renameVoiceprint(id: Int64, to name: String) {
+        guard let s = voiceprints.first(where: { $0.id == id }) else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        s.name = trimmed.isEmpty ? nil : trimmed
+        s.nameSource = trimmed.isEmpty ? nil : VoiceprintNameSource.manual.rawValue
+        DataStore.shared.updateSpeaker(s)
+        loadVoiceprints()
+    }
+
+    public func deleteVoiceprint(id: Int64) {
+        DataStore.shared.deleteSpeaker(id: id)
+        loadVoiceprints()
+    }
+
+    public func mergeVoiceprints(targetId: Int64, sourceId: Int64) {
+        DataStore.shared.mergeSpeakers(targetId: targetId, sourceId: sourceId)
+        loadVoiceprints()
+    }
+
+    public func clearAllVoiceprints() {
+        DataStore.shared.clearAllSpeakers()
+        loadVoiceprints()
     }
 
     // MARK: - LLM profiles

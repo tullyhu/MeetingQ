@@ -34,11 +34,22 @@ public enum StoreKeys {
     public static let showDockIcon = "show_dock_icon"
     // iOS-only
     public static let semanticDetectionEnabled = "semantic_detection_enabled"
+    /// Beta: split the remote track into per-person clusters via on-device
+    /// speaker embeddings (FluidAudio CAM++). Default off.
+    public static let speakerDiarizationEnabled = "speaker_diarization_enabled"
+    /// Sub-toggle: show 对方N / Speaker N labels live in the floating window.
+    public static let speakerLiveLabelsEnabled = "speaker_live_labels_enabled"
+    /// Persisted meeting-chat thread height (peek height is never persisted).
+    public static let chatThreadHeight = "chat_thread_height"
+    /// W5 meeting auto-detection mode: "off" | "prompt" (default) | "auto".
+    public static let meetingAutoDetectMode = "meeting_auto_detect_mode"
+    /// User-taught meeting-app bundle IDs (JSON array).
+    public static let meetingLearnedApps = "meeting_learned_apps"
 
     public static let all = [
         userName, userNicknames, userAsrVariants, userRole, llmProfiles,
         captureWindowTitle, micEnabled, micDeviceName, privacyAccepted,
         multimodalEnabled, localOcrFallbackEnabled, screenshotAnalysisEngine, appLanguage, onboardingDone, showDockIcon,
-        semanticDetectionEnabled,
+        semanticDetectionEnabled, speakerDiarizationEnabled, speakerLiveLabelsEnabled,
     ]
 }

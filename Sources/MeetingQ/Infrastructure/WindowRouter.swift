@@ -14,7 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import MeetingQCore
 import Foundation
+import CoreGraphics
 
 public extension Notification.Name {
     static let mmOpenSettings = Notification.Name("MeetingQ.OpenSettings")
@@ -26,6 +28,14 @@ public extension Notification.Name {
     static let mmScreenCapturePermissionGranted = Notification.Name("MeetingQ.ScreenCapturePermissionGranted")
     static let mmSessionEnded = Notification.Name("MeetingQ.SessionEnded")
     static let mmMonitoringStateChanged = Notification.Name("MeetingQ.MonitoringStateChanged")
+    /// Posted by MeetingWatcherService; userInfo["title"] = window title to capture.
+    static let mmAutoStartMeeting = Notification.Name("MeetingQ.AutoStartMeeting")
+    /// Monitored meeting window was destroyed (hard end) — stop capture now.
+    static let mmMeetingWindowClosed = Notification.Name("MeetingQ.MeetingWindowClosed")
+    /// User confirmed the soft-end prompt — stop capture and generate minutes.
+    static let mmMeetingEndConfirmed = Notification.Name("MeetingQ.MeetingEndConfirmed")
+    /// FloatingWindowViewModel → MeetingWatcherService; object = NSNumber(CGWindowID) or nil.
+    static let mmCaptureWindowChanged = Notification.Name("MeetingQ.CaptureWindowChanged")
 }
 
 public enum WindowRouter {
@@ -36,5 +46,9 @@ public enum WindowRouter {
     public static func hideMainWindow() { NotificationCenter.default.post(name: .mmHideMainWindow, object: nil) }
     public static func postMonitoringState(_ isMonitoring: Bool) {
         NotificationCenter.default.post(name: .mmMonitoringStateChanged, object: isMonitoring)
+    }
+    public static func postCaptureWindow(_ id: CGWindowID?) {
+        NotificationCenter.default.post(name: .mmCaptureWindowChanged,
+                                        object: id.map { NSNumber(value: $0) })
     }
 }

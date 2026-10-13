@@ -42,22 +42,34 @@ cd "$ROOT"
 mkdir -p "$ROOT/dist"
 
 echo "Compiling ($MODE)..."
-swiftc ${VFS_ARGS[@]+"${VFS_ARGS[@]}"} \
-  -target arm64-apple-macos15.0 \
-  -sdk "$SDK_PATH" \
-  -swift-version 5 \
-  ${OPT_FLAGS[@]+"${OPT_FLAGS[@]}"} \
-  -module-name MeetingQ \
-  $(find Sources/MeetingQCore Sources/MeetingQ -name '*.swift') \
-  -o "$ROOT/dist/$BIN_NAME"
+BUILD_CONFIG="debug"
+if [ "$MODE" = "release" ]; then
+  BUILD_CONFIG="release"
+fi
+swift build -c "$BUILD_CONFIG"
+BIN_PATH="$(swift build -c "$BUILD_CONFIG" --show-bin-path)/$BIN_NAME"
+cp "$BIN_PATH" "$ROOT/dist/$BIN_NAME"
 
 rm -rf "$APP_DIR"
-mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
+mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources" "$APP_DIR/Contents/Frameworks"
 cp "$ROOT/dist/$BIN_NAME" "$APP_DIR/Contents/MacOS/$BIN_NAME"
+
+# Copy any SPM-built frameworks the binary links against (e.g. FluidAudio's
+# binary targets) and point the rpath at the bundle's Frameworks dir.
+BIN_DIR="$(dirname "$BIN_PATH")"
+for fw in "$BIN_DIR"/PackageFrameworks/*.framework; do
+  [ -e "$fw" ] || continue
+  cp -R "$fw" "$APP_DIR/Contents/Frameworks/"
+done
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_DIR/Contents/MacOS/$BIN_NAME" 2>/dev/null || true
 cp "$ROOT/Resources/Info.plist" "$APP_DIR/Contents/Info.plist"
 if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
   cp "$ROOT/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
   /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
+fi
+# Ship third-party license texts inside the bundle (Apache 2.0 attribution).
+if [ -d "$ROOT/Resources/Licenses" ]; then
+  cp -R "$ROOT/Resources/Licenses" "$APP_DIR/Contents/Resources/Licenses"
 fi
 
 if [ -z "${CODESIGN_IDENTITY:-}" ] && security find-certificate -c "MeetingQ Dev" >/dev/null 2>&1; then

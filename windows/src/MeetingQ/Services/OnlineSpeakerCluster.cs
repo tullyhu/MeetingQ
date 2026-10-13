@@ -76,6 +76,8 @@ public sealed class OnlineSpeakerCluster
         return (float)(dot / (Math.Sqrt(na) * Math.Sqrt(nb)));
     }
 
+    public static void NormalizeInPlace(float[] v) => Normalize(v);
+
     private static void Normalize(float[] v)
     {
         double sum = 0;

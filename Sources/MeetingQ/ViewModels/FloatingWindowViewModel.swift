@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import MeetingQCore
 import AVFoundation
 import CoreGraphics
 import Foundation
@@ -133,6 +134,18 @@ public final class FloatingWindowViewModel {
     private var contextManager: ContextWindowManager?
     private var pendingStartAfterWindowSelect = false
     private nonisolated(unsafe) var permissionObserver: NSObjectProtocol?
+    private nonisolated(unsafe) var watcherObservers: [NSObjectProtocol] = []
+
+    // MARK: Speaker diarization (Beta, toggle-gated)
+    private var diarization: SpeakerDiarizationService?
+    private var diarizationLiveLabels = true
+    /// clusterId → display label ("对方2" / "Speaker 2"), assigned on first live use.
+    private var clusterLabels: [Int: String] = [:]
+    /// Recent remote-track segments with their cluster, for end-of-meeting
+    /// transcript relabeling and live labeling of the current utterance.
+    private var remoteSegments: [(time: Date, clusterId: Int)] = []
+    /// Clusters with enough evidence for a live label (cached on MainActor).
+    private var liveLabelableClusters: Set<Int> = []
 
     private static let hhmmss: DateFormatter = {
         let f = DateFormatter()
@@ -193,12 +206,44 @@ public final class FloatingWindowViewModel {
                 }
             }
         }
+        watcherObservers = [
+            NotificationCenter.default.addObserver(
+                forName: .mmAutoStartMeeting, object: nil, queue: .main
+            ) { [weak self] note in
+                Task { @MainActor in
+                    guard let self, !self.isMonitoring else { return }
+                    if let title = note.userInfo?["title"] as? String, !title.isEmpty {
+                        self.captureWindowTitle = title
+                        self.pendingStartAfterWindowSelect = false
+                    }
+                    await self.startListening()
+                }
+            },
+            NotificationCenter.default.addObserver(
+                forName: .mmMeetingWindowClosed, object: nil, queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.isMonitoring else { return }
+                    await self.stopListening()
+                }
+            },
+            NotificationCenter.default.addObserver(
+                forName: .mmMeetingEndConfirmed, object: nil, queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self, self.isMonitoring else { return }
+                    await self.stopListening()
+                    await self.showQuickSummary()
+                }
+            },
+        ]
     }
 
     deinit {
         if let permissionObserver {
             NotificationCenter.default.removeObserver(permissionObserver)
         }
+        watcherObservers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 
     public func getRecentTranscripts(_ maxEntries: Int = 100) -> [String] {
@@ -307,6 +352,7 @@ public final class FloatingWindowViewModel {
         }
 
         audio.setAsr(asr)
+        setupDiarization()
 
         audioSignalReceived = false
         transcriptReceived = false
@@ -386,6 +432,7 @@ public final class FloatingWindowViewModel {
             try await screen.start(windowID: captureWindowID)
         } catch {
         }
+        WindowRouter.postCaptureWindow(captureWindowID)
     }
 
     public func stopListening() async {
@@ -402,6 +449,7 @@ public final class FloatingWindowViewModel {
         inlineSummaryText = ""
 
         await screen.stop()
+        audio.onRemoteSpeechSegment = nil
         audio.setAsr(nil)
         await audio.stop()
         await asr.disconnect()
@@ -421,6 +469,7 @@ public final class FloatingWindowViewModel {
         partialEntries = []
 
         isMonitoring = false
+        WindowRouter.postCaptureWindow(nil)
         statusText = tr("已停止", "Stopped")
         currentTopic = tr("（已结束）", "(Ended)")
         committedEntries = []
@@ -442,6 +491,14 @@ public final class FloatingWindowViewModel {
         if let session {
             await endSession(session, finalTopic: finalTopic)
         }
+
+        // Diarization state is meeting-scoped; clear only after endSession has
+        // consumed the clusters (relabeling + voiceprint persistence).
+        if let svc = diarization { await svc.resetClusters() }
+        diarization = nil
+        remoteSegments.removeAll()
+        clusterLabels.removeAll()
+        liveLabelableClusters.removeAll()
     }
 
     public func toggleDiagnostics() {
@@ -584,6 +641,19 @@ public final class FloatingWindowViewModel {
                 context: [TranscriptContextLine(time: Self.hhmmss.string(from: Date()), speaker: nil, text: tr("[功能自检] 测试被叫到姓名提醒弹窗", "[Self Test] Testing the name-called alert popup"))],
                 screenshotPath: selfTestScreenshotPath))
             stepNameAlert?.setOk(tr("弹窗已触发", "Alert Triggered"))
+
+            if KeychainStorage.loadBool(StoreKeys.speakerDiarizationEnabled) {
+                let step = DiagnosticItem(name: tr("说话人分离", "Speaker Diarization"))
+                diagnosticSteps.append(step)
+                step.setRunning(tr("加载声纹模型...", "Loading voiceprint models..."))
+                let svc = SpeakerDiarizationService()
+                do {
+                    try await svc.prepare()
+                    step.setOk(tr("模型就绪", "Models ready"))
+                } catch {
+                    step.setError(error.localizedDescription)
+                }
+            }
 
             if isMultimodalEnabled {
                 stepVisionModel?.setRunning(tr("测试 Vision 连接...", "Testing Vision connection..."))
@@ -1074,6 +1144,12 @@ public final class FloatingWindowViewModel {
         }
         trackPartials[trackKey] = partial
 
+        if committedText != nil, diarizationLiveLabels, diarization != nil,
+           let label = committedLabel, label != Self.resolvedSelfLabel,
+           let cid = recentCluster(near: Date()), liveLabelableClusters.contains(cid) {
+            committedLabel = clusterLabel(for: cid)
+        }
+
         if let committed = committedText {
             if let label = committedLabel, label == Self.resolvedSelfLabel {
                 // The mic re-capturing the remote party's voice from speakers
@@ -1189,6 +1265,74 @@ public final class FloatingWindowViewModel {
         return name.isEmpty ? tr("我", "Me") : name
     }
 
+    // MARK: - Speaker diarization (Beta)
+
+    /// Wires the remote-track VAD segment callback to the diarization service
+    /// when the feature toggle is on. Any failure leaves the pipeline
+    /// untouched — the meeting simply stays on the single "对方" label.
+    private func setupDiarization() {
+        guard KeychainStorage.loadBool(StoreKeys.speakerDiarizationEnabled) else {
+            diarization = nil
+            audio.onRemoteSpeechSegment = nil
+            return
+        }
+        let svc = SpeakerDiarizationService()
+        diarization = svc
+        diarizationLiveLabels = KeychainStorage.loadBool(StoreKeys.speakerLiveLabelsEnabled, default: true)
+        Task { try? await svc.prepare() }
+        audio.onRemoteSpeechSegment = { [weak self, weak svc] samples in
+            guard let svc else { return }
+            Task {
+                guard await svc.isReady,
+                      let clusterId = await svc.processSegment(samples: samples) else { return }
+                await MainActor.run { self?.recordRemoteCluster(clusterId) }
+            }
+        }
+    }
+
+    private func recordRemoteCluster(_ clusterId: Int) {
+        remoteSegments.append((Date(), clusterId))
+        if remoteSegments.count > 300 { remoteSegments.removeFirst(remoteSegments.count - 300) }
+        Task { [weak self] in
+            guard let self, let svc = self.diarization,
+                  await svc.isLiveLabelable(clusterId) else { return }
+            self.liveLabelableClusters.insert(clusterId)
+            await self.resolveClusterNameFromLibrary(clusterId)
+        }
+    }
+
+    /// Voiceprint-library live hit: once a cluster is labelable, match its
+    /// centroid against named library entries so a known voice shows their
+    /// real name during the meeting, not just at meeting end.
+    private func resolveClusterNameFromLibrary(_ clusterId: Int) async {
+        guard clusterLabels[clusterId] == nil, let svc = diarization,
+              let centroid = await svc.centroid(of: clusterId) else { return }
+        let library = DataStore.shared.fetchSpeakers()
+        let named = library.compactMap { s -> (id: Int64, centroid: [Float])? in
+            guard s.isNamed, let c = s.centroid else { return nil }
+            return (s.id, c)
+        }
+        guard !named.isEmpty,
+              let matchId = SpeakerDiarizationService.bestLibraryMatch(
+                  embedding: centroid, against: named, threshold: 0.75),
+              let name = library.first(where: { $0.id == matchId })?.name,
+              !name.isEmpty else { return }
+        clusterLabels[clusterId] = name
+    }
+
+    private func clusterLabel(for clusterId: Int) -> String {
+        if let label = clusterLabels[clusterId] { return label }
+        let n = clusterLabels.count + 1
+        let label = tr("对方\(n)", "Speaker \(n)")
+        clusterLabels[clusterId] = label
+        return label
+    }
+
+    /// Most recent cluster heard within `window` seconds before `time`.
+    private func recentCluster(near time: Date, window: TimeInterval = 10) -> Int? {
+        remoteSegments.last { $0.time <= time && time.timeIntervalSince($0.time) <= window }?.clusterId
+    }
+
     private func appendHistory(_ text: String, speaker: String? = nil) {
         let line = (speaker?.isEmpty == false) ? "\(speaker!)：\(text)" : text
         transcriptHistory.append(line)
@@ -1267,6 +1411,17 @@ public final class FloatingWindowViewModel {
         hasSessionData = true
         contextManager?.addTranscript(Self.hhmmss.string(from: e.timestamp) + tr(" [截图]", " [Screenshot]"))
 
+        // AX-first active-speaker detection (cheap, works even in text-only
+        // mode); Vision LLM below is the fallback and must not overwrite an
+        // AX-derived name.
+        let axOwnerName = WindowListHelper.listWindows().first { $0.title == captureWindowTitle }?.ownerName
+        if let axOwnerName {
+            Task.detached(priority: .utility) { [weak self] in
+                guard let detection = ActiveSpeakerAxService.detectActiveSpeaker(ownerName: axOwnerName) else { return }
+                await MainActor.run { self?.applyActiveSpeakerName(detection.speakerName, source: "ax", screenshotPath: e.filePath) }
+            }
+        }
+
         guard isMultimodalEnabled, currentTopicRef != nil else { return }
         let filePath = e.filePath
         let topic = currentTopic
@@ -1308,16 +1463,17 @@ public final class FloatingWindowViewModel {
                     record.chartType = result.chartType
                     record.chartInsight = result.chartInsight
                     record.sensitivityLevel = result.sensitivityLevel
-                    record.activeSpeakerName = result.activeSpeakerName
+                    if record.speakerNameSource != "ax" {
+                        record.activeSpeakerName = result.activeSpeakerName
+                        record.speakerNameSource = "vision"
+                    }
                     record.analysisStatus = "ready"
                     DataStore.shared.update(record)
                 }
 
-                if let name = result.activeSpeakerName, !name.trimmingCharacters(in: .whitespaces).isEmpty,
-                   let currentLabel = self.lastSpeakerLabel,
-                   self.pendingSpeakerLabels.remove(currentLabel) != nil,
-                   self.speakerNameMap[currentLabel] == nil {
-                    self.speakerNameMap[currentLabel] = name
+                if recordAllowsVisionName(filePath), let name = result.activeSpeakerName,
+                   !name.trimmingCharacters(in: .whitespaces).isEmpty {
+                    self.applyActiveSpeakerName(name, source: "vision", screenshotPath: nil)
                 }
             } catch {
             }
@@ -1325,6 +1481,25 @@ public final class FloatingWindowViewModel {
     }
 
     // MARK: - Topic detection
+
+    /// AX-derived speaker names outrank Vision/OCR ones; never downgrade.
+    private func recordAllowsVisionName(_ path: String) -> Bool {
+        sessionScreenshotMap[path]?.speakerNameSource != "ax"
+    }
+
+    private func applyActiveSpeakerName(_ name: String, source: String, screenshotPath: String?) {
+        if let path = screenshotPath, let record = sessionScreenshotMap[path] {
+            if source == "ax" || record.speakerNameSource != "ax" {
+                record.activeSpeakerName = name
+                record.speakerNameSource = source
+                DataStore.shared.update(record)
+            }
+        }
+        guard let currentLabel = lastSpeakerLabel,
+              pendingSpeakerLabels.remove(currentLabel) != nil,
+              speakerNameMap[currentLabel] == nil else { return }
+        speakerNameMap[currentLabel] = name
+    }
 
     private func detectTopic() async {
         if topicDetecting { return }
@@ -1623,6 +1798,9 @@ public final class FloatingWindowViewModel {
             .sorted { $0.timestamp < $1.timestamp }
 
         var speakerMapping: [String: String] = [:]
+        if diarization != nil {
+            await applyDiarizationResults(topics: topics, mapping: &speakerMapping)
+        }
         Self.mapSpeakerLabelsToNames(topics: topics, screenshots: screenshots, mapping: &speakerMapping)
         // Fallback: live OCR mapping (single data point) for 发言人N labels the vote
         // couldn't resolve. Never applied to "对方" — a single OCR hit must not pin
@@ -1717,6 +1895,66 @@ public final class FloatingWindowViewModel {
         }
     }
 
+    // MARK: - Diarization post-processing (meeting end)
+
+    /// Relabels remote transcripts to per-cluster labels, matches clusters
+    /// against the long-term voiceprint library (named matches win over the
+    /// OCR vote below), and upserts cluster centroids/samples into the library.
+    private func applyDiarizationResults(topics: [Topic], mapping: inout [String: String]) async {
+        guard let svc = diarization else { return }
+        let stable = await svc.stableClusters
+        // A single stable cluster means "no separation found" — keep 对方.
+        guard stable.count >= 2 else { return }
+
+        let selfLabel = Self.resolvedSelfLabel
+        for topic in topics {
+            for t in topic.transcripts {
+                guard let s = t.speaker, s != selfLabel, s == "对方" || s == "Remote" else { continue }
+                if let cid = recentCluster(near: t.timestamp) {
+                    t.speaker = clusterLabel(for: cid)
+                    DataStore.shared.update(t)
+                }
+            }
+        }
+
+        let library = DataStore.shared.fetchSpeakers()
+        let libEntries = library.compactMap { s -> (id: Int64, centroid: [Float])? in
+            s.centroid.map { (s.id, $0) }
+        }
+        for cluster in stable {
+            let label = clusterLabel(for: cluster.id)
+            let matchedId = SpeakerDiarizationService.bestLibraryMatch(
+                embedding: cluster.centroid, against: libEntries, threshold: 0.75)
+            if let mid = matchedId, let known = library.first(where: { $0.id == mid }) {
+                if let name = known.name, !name.isEmpty, mapping[label] == nil {
+                    mapping[label] = name
+                }
+                mergeCluster(cluster, into: known)
+            } else {
+                let sp = VoiceprintSpeaker()
+                sp.centroid = cluster.centroid
+                sp.embeddingCount = cluster.learnCount
+                sp.samples = cluster.samples
+                sp.lastSeenAt = cluster.lastHeardAt
+                DataStore.shared.insertSpeaker(sp)
+            }
+        }
+    }
+
+    private func mergeCluster(_ cluster: SpeakerDiarizationService.Cluster, into speaker: VoiceprintSpeaker) {
+        let n = max(speaker.embeddingCount, 1)
+        let m = max(cluster.learnCount, 1)
+        if let sc = speaker.centroid, sc.count == cluster.centroid.count {
+            speaker.centroid = zip(sc, cluster.centroid).map { ($0 * Float(n) + $1 * Float(m)) / Float(n + m) }
+        } else if speaker.centroid == nil {
+            speaker.centroid = cluster.centroid
+        }
+        speaker.embeddingCount = n + m
+        speaker.samples = Array((speaker.samples + cluster.samples).suffix(10))
+        speaker.lastSeenAt = Date()
+        DataStore.shared.updateSpeaker(speaker)
+    }
+
     /// Resolves anonymous/ambiguous speaker labels (发言人N, 对方) to real names
     /// by correlating every labeled transcript timestamp with nearby screenshot
     /// OCR results using a distance-weighted majority vote. A label is only
@@ -1730,7 +1968,7 @@ public final class FloatingWindowViewModel {
             .filter { tr in
                 guard let speaker = tr.speaker, speaker != selfLabel else { return false }
                 let resolvable = speaker.hasPrefix("发言人") || speaker.hasPrefix("Speaker")
-                    || speaker == "对方" || speaker == "Remote"
+                    || speaker.hasPrefix("对方") || speaker == "Remote"
                 return resolvable && mapping[speaker] == nil
             }
             .map { (label: $0.speaker!, timestamp: $0.timestamp) }

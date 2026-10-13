@@ -1,0 +1,68 @@
+# 说话人分离（声纹）规格说明
+
+<!-- doc-covers: Sources/MeetingQ/Services/SpeakerDiarizationService.swift, Sources/MeetingQ/ViewModels/FloatingWindowViewModel.swift (applyDiarizationResults), Sources/MeetingQ/Services/AudioCaptureService.swift (onRemoteSpeechSegment) -->
+<!-- doc-verified: initial -->
+
+对方轨（系统音频）通过设备端 CAM++ 声纹模型（FluidAudio，192 维，fp16/ANE）细分为多个说话人簇。全部离线运行，模型首次启用时从 HuggingFace 下载（约 15MB），不进入安装包。
+
+## 设计来源
+
+核心策略借鉴 screenpipe 的 speaker 管线（`crates/screenpipe-audio/src/speaker/`）：
+
+- **时长门控**：「够格被认出」与「够格当老师」是两个门槛，防止边缘音频污染质心
+- **质心 + 样本**：每簇维护运行质心 + 最多 10 个样本 embedding，余弦相似度匹配
+- **保守原则**：不确定就新建/弃权，宁可保持「对方」也不张冠李戴
+
+## 时长门控
+
+| 实际语音时长 | 决策 | 行为 |
+|---|---|---|
+| < 1.0s | Skip | 不识别、不建簇、不学习 |
+| 1.0–2.0s | MatchOnly | 可匹配已有簇，不写回 |
+| ≥ 2.0s | MatchAndLearn | 可匹配、新建簇、更新质心 |
+
+## 聚类参数
+
+- 匹配阈值：cosine ≥ 0.72（CAM++ 192 维，初值，待实测标定）
+- 簇上限：6；达到上限后强制并入最近簇
+- 簇为会议作用域，会末清空；稳定簇（≥2 个学习样本）沉淀进长期声纹库
+
+## 声纹库（跨会议）
+
+表：`speakers(name, name_source, centroid BLOB, embedding_count, …)` + `speaker_embeddings`。
+
+- 会末归并：簇质心与库中质心 cosine ≥ **0.75** → 加权合并；否则新建匿名条目
+- 命名来源：`manual`（用户在设置页改名，永不被覆盖）/ `auto`（OCR/AX 投票写入）
+- 库中已命名的匹配结果**优先于** OCR 命名投票
+- 声纹向量不可还原为语音，仅存本机；设置页可单删、合并、清空全部
+
+## 边界 case 清单
+
+实时与生命周期：
+
+- **R1** 会议中途切换总开关 → 当场会议不切换，下次会议生效
+- **R2** 新簇的前 2 个可学习样本之前不显示「对方N」，仍显示「对方」（防抖）；partial 转写永不带簇标签
+- **R3** 模型未下载/下载失败 → 开关自动弹回关闭并提示
+- **R4** 运行中 FluidAudio 抛错 → 当场静默降级为「对方」，开关状态不变
+- **R5** 只产出 1 个稳定簇 → 视为未分离，全部保持「对方」
+- **R6** 簇数 >6 → 强制并入最近簇，不再新建
+- **R7** 会议 < 2 分钟通常无稳定簇，自然走 R5
+- **R8** 已 committed 的历史条目标签不回改；只有新条目使用新簇标签
+
+命名：
+
+- **N1** 每簇独立走 OCR/AX「正在发言」时间戳加权投票（复用 mapSpeakerLabelsToNames，1.5× 收敛门槛）
+- **N2** 声纹库手动命名 > OCR/AX 投票 > 保持「对方N」
+- **N3** 单条 OCR 命中不得锁定整个对方轨（原有约束，对簇同样适用）
+
+声纹库：
+
+- **L1** 手动改名后下次会议实时命中显示真名
+- **L2** 合并两条声纹：质心按样本数加权，样本合并后截断到 10，目标的名字优先
+- **L3** 清空全部需二次确认；删错无妨——下次会议会重建匿名条目
+
+## 测试要求
+
+- 单元测试（纯逻辑，不依赖模型）：时长门控三档、簇上限强制合并、单簇丢弃（R5）、库匹配置信阈值
+- 自检：开关开启时诊断页追加「说话人分离」步骤（待实现）
+- 实测矩阵：腾讯会议 / Zoom / 飞书 × 2 人远程 / 3 人远程 / 外放

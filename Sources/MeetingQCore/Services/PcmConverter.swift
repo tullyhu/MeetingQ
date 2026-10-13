@@ -18,8 +18,8 @@ import AVFAudio
 import CoreMedia
 import Foundation
 
-enum PcmConverter {
-    static func convert(_ converter: AVAudioConverter, input: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+public enum PcmConverter {
+    public static func convert(_ converter: AVAudioConverter, input: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
         let ratio = converter.outputFormat.sampleRate / converter.inputFormat.sampleRate
         let capacity = AVAudioFrameCount(Double(input.frameLength) * ratio * 1.2) + 1024
         guard let output = AVAudioPCMBuffer(pcmFormat: converter.outputFormat, frameCapacity: capacity) else { return nil }
@@ -39,8 +39,8 @@ enum PcmConverter {
     }
 }
 
-enum CmsPcmHelper {
-    static func pcmBuffer(from sampleBuffer: CMSampleBuffer) -> AVAudioPCMBuffer? {
+public enum CmsPcmHelper {
+    public static func pcmBuffer(from sampleBuffer: CMSampleBuffer) -> AVAudioPCMBuffer? {
         guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer),
               let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription),
               let format = AVAudioFormat(streamDescription: asbd) else { return nil }

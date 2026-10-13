@@ -83,6 +83,8 @@ public static class SecureStorageKeys
     // Microphone capture
     public const string MicEnabled    = "mic_enabled";
     public const string MicDeviceName = "mic_device_name";
+    // W5 meeting auto-detection mode: "off" | "prompt" (default) | "auto"
+    public const string MeetingAutoDetectMode = "meeting_auto_detect_mode";
     // Local ASR model directory — deprecated, replaced by AST server config
     public const string LocalAsrModelDir = "local_asr_model_dir";
 
