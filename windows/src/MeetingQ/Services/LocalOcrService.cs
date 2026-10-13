@@ -13,7 +13,7 @@ namespace MeetingQ.Services;
 public partial class LocalOcrService
 {
     // "张三 正在发言" / "李四(发言中)" / "正在发言：王五" — 2~4-char CJK names near
-    // speaking indicators used by 腾讯会议/Teams/Zoom/钉钉.
+    // speaking indicators used by major meeting apps.
     [GeneratedRegex(@"(?<![一-龥])(?<name>[一-龥]{2,4})\s*[（(]?(?:正在发言|正在讲话|正在说话|发言中|讲话中)[)）]?")]
     private static partial Regex NameBeforeIndicatorRegex();
 

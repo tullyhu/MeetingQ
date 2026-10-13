@@ -51,7 +51,7 @@ A three-layer detection pipeline balancing speed and accuracy:
 On a hit: popup alert (can be pinned) → instant screenshot → shows the original sentence + 8 lines of context + the AI-extracted questions for you to answer. Homophone misreads found via pinyin matching are **learned automatically** and take the fast path next time.
 
 ### 🪟 Automatic Meeting Detection (New in v1.8)
-- **Meetings find themselves**: detects a meeting start via candidate windows + audio-output usage (meeting apps hold audio output for the entire call — works even when you're a muted, camera-off listener). Covers Zoom / Tencent Meeting / Feishu / DingTalk / Teams / Webex / FaceTime; browsers are matched by meeting domains; unknown meeting apps can be taught with one click
+- **Meetings find themselves**: detects a meeting start via candidate windows + audio-output usage (meeting apps hold audio output for the entire call — works even when you're a muted, camera-off listener). Covers major meeting apps out of the box; browsers are matched by meeting domains; unknown meeting apps can be taught with one click
 - **Three modes** (Settings → General): Auto Start / Prompt Only (default) / Off — the meeting window is auto-selected on detection
 - **No false endings**: a shrunken mini-window or minimize never counts as "over". Only the window actually being destroyed stops capture automatically; a suspected end (remote side silent for 1 minute) only prompts you to confirm
 
