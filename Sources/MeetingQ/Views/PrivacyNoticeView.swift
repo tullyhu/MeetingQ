@@ -64,6 +64,12 @@ public struct PrivacyNoticeView: View {
                     section("scalemass", tr("合规提示", "Legal Notice"), tr(
                         "录制会议内容可能涉及其他参会人的权益。请遵守所在地区的录音相关法律法规，并在必要时事先取得参会人的同意。",
                         "Recording meetings may affect the rights of other participants. Please comply with the recording laws in your jurisdiction and obtain consent from participants where required."))
+
+                    Link(destination: privacyPolicyURL) {
+                        Label(tr("查看完整隐私政策", "View Full Privacy Policy"), systemImage: "safari")
+                            .font(.callout)
+                    }
+                    .padding(.top, 2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -81,6 +87,12 @@ public struct PrivacyNoticeView: View {
         .padding(28)
         .frame(width: 480, height: 470)
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var privacyPolicyURL: URL {
+        URL(string: AppLanguage.current.isEnglish
+            ? "https://clydris.com/meetingq/mac/privacy#en"
+            : "https://clydris.com/meetingq/mac/privacy")!
     }
 
     private func section(_ symbol: String, _ title: String, _ body: String) -> some View {

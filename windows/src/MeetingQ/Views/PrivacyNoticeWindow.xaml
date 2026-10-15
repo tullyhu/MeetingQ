@@ -57,6 +57,13 @@
                            LineHeight="20">
                     <Run Text="{local:Loc PrivacyScopeBody}"/>
                 </TextBlock>
+
+                <TextBlock Margin="0,14,0,0">
+                    <Hyperlink Foreground="#6366F1" TextDecorations="None" Cursor="Hand"
+                               RequestNavigate="PrivacyLink_RequestNavigate">
+                        <Run Text="{local:Loc PrivacyPolicyLink}"/>
+                    </Hyperlink>
+                </TextBlock>
             </StackPanel>
         </ScrollViewer>
 
